@@ -259,6 +259,33 @@ body.sb-collapsed .sb-collapse-btn svg{transform:rotate(180deg)}
 .tx-opt.active[data-v="ingreso"]{border-color:var(--green);background:var(--green-soft);color:var(--green)}
 .tx-opt.active[data-v="egreso"]{border-color:var(--red);background:var(--red-soft);color:var(--red)}
 
+/* reportes */
+.rep-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px}
+.rep-desc{font-size:12.5px;color:var(--muted);font-weight:400;max-width:560px;line-height:1.4}
+.rep-alert{background:var(--red-soft);color:#9a2820;border-radius:8px;padding:10px 12px;font-size:12.5px;font-weight:600;margin-top:12px}
+.funnel{display:flex;flex-direction:column;gap:8px}
+.funnel-row{display:grid;grid-template-columns:130px 1fr 120px;align-items:center;gap:12px}
+.funnel-label{font-size:13px;font-weight:600;color:var(--navy-soft)}
+.funnel-bar{background:var(--light);border-radius:7px;height:30px;overflow:hidden}
+.funnel-fill{height:100%;background:linear-gradient(90deg,var(--orange),var(--orange-deep));display:flex;align-items:center;justify-content:flex-end;padding-right:10px;color:#fff;font-weight:700;font-size:13px;min-width:28px;transition:width .4s}
+.funnel-val{font-family:'DM Mono',monospace;font-size:13px;text-align:right;font-weight:500}
+.dot{display:inline-block;width:11px;height:11px;border-radius:50%}
+.dot.ok{background:var(--green)} .dot.ambar{background:var(--amber)} .dot.rojo{background:var(--red)}
+.rep-legend{display:flex;gap:18px;margin-top:12px;font-size:12px;color:var(--muted)}
+.rep-legend span{display:inline-flex;align-items:center;gap:6px}
+.aging{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+@media(max-width:680px){.aging{grid-template-columns:repeat(2,1fr)}.funnel-row{grid-template-columns:90px 1fr 90px;gap:6px}}
+.aging-col{background:var(--light);border-radius:10px;padding:16px 12px;text-align:center;border:1px solid var(--border)}
+.aging-col.warn{background:var(--amber-soft);border-color:#f0dcae}
+.aging-col.crit{background:var(--red-soft);border-color:#f3c9c4}
+.aging-v{font-family:'DM Mono',monospace;font-weight:600;font-size:17px;color:var(--navy)}
+.aging-l{font-size:11px;color:var(--muted);margin-top:4px;font-weight:600}
+.eerr{max-width:560px}
+.eerr-row{display:flex;justify-content:space-between;padding:9px 0;font-size:14px;border-bottom:1px solid #f0eee9}
+.eerr-row.sub{padding-left:16px;color:var(--muted);font-size:13px}
+.eerr-row.total{border-top:1.5px solid var(--border);border-bottom:none;font-weight:700;margin-top:2px}
+.eerr-row.final{border-top:2px solid var(--navy);font-size:15px}
+
 @media(max-width:900px){
   .sidebar{position:fixed;left:-240px;z-index:300;transition:left .25s;box-shadow:var(--shadow-lg)}
   .sidebar.open{left:0}
@@ -729,6 +756,7 @@ const NAV = [
   {id:"empresas",  label:"Empresas",     icon:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h.01M9 13h.01M9 17h.01M13 9h2M13 13h2M13 17h2"/>'},
   {id:"personas",  label:"Personas",     icon:'<circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2M16 3.13a4 4 0 0 1 0 7.75"/>'},
   {sec:"Sistema"},
+  {id:"reportes",  label:"Reportes",      icon:'<path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/>'},
   {id:"config",    label:"Configuración",icon:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 8 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H2a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 3.6 8a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H8a1.65 1.65 0 0 0 1-1.51V2a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V8a1.65 1.65 0 0 0 1.51 1H22a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>'}
 ];
 
@@ -2069,6 +2097,302 @@ const Config={
     });
     XLSX.writeFile(wb,"akadem_erp_"+todayISO()+".xlsx"); toast("Excel exportado","ok");
   }
+};
+
+/* =====================================================================
+   REPORTES — los 14 reportes de gestión, en una pestaña
+   Reutiliza Calc y Tes; añade cálculos faltantes.
+   ===================================================================== */
+const Rep = {
+  /* ---------- cálculos faltantes ---------- */
+  // embudo: conteo, monto y tiempo medio por etapa
+  embudo(){
+    return ESTADOS_PIPELINE.filter(e=>e.key!=="perdida").map(e=>{
+      const items=Store.all("propuestas").filter(p=>p.estado===e.key);
+      const monto=items.reduce((s,p)=>s+(+p.monto||0),0);
+      return {etapa:e.label,key:e.key,n:items.length,monto,prob:e.prob};
+    });
+  },
+  // win rate global y por tipo
+  winRate(filtroTipo){
+    let props=Store.all("propuestas").filter(p=>["adjudicada","perdida"].includes(p.estado));
+    if(filtroTipo) props=props.filter(p=>p.tipo===filtroTipo);
+    const g=props.filter(p=>p.estado==="adjudicada").length, perd=props.filter(p=>p.estado==="perdida").length;
+    return {ganadas:g,perdidas:perd,total:g+perd,rate:(g+perd)>0?g/(g+perd)*100:0};
+  },
+  winRatePorTipo(){
+    return TIPOS_SERVICIO.map(t=>({tipo:t.code,label:t.label,...this.winRate(t.code)})).filter(r=>r.total>0);
+  },
+  // rentabilidad por tipo de servicio
+  rentabilidadTipo(){
+    const map={};
+    Store.all("proyectos").forEach(p=>{ const m=Calc.margenProyecto(p.id);
+      if(!map[p.tipo]) map[p.tipo]={tipo:p.tipo,ingreso:0,egreso:0,margen:0,n:0};
+      map[p.tipo].ingreso+=m.ingR; map[p.tipo].egreso+=m.egR; map[p.tipo].margen+=m.margenReal; map[p.tipo].n++;
+    });
+    return Object.values(map).map(r=>({...r,pct:r.ingreso>0?r.margen/r.ingreso*100:0})).sort((a,b)=>b.margen-a.margen);
+  },
+  // concentración de cartera por cliente (sobre facturación + ingresos reales)
+  concentracion(){
+    const map={};
+    Store.all("proyectos").forEach(p=>{ const m=Calc.margenProyecto(p.id);
+      const cli=empName(p.cliente_ref); map[cli]=(map[cli]||0)+m.ingR; });
+    const total=Object.values(map).reduce((s,v)=>s+v,0);
+    return {total,items:Object.entries(map).map(([cli,v])=>({cli,monto:v,pct:total>0?v/total*100:0})).sort((a,b)=>b.monto-a.monto)};
+  },
+  // semáforo de margen por proyecto
+  semaforoProyectos(){
+    return Store.all("proyectos").map(p=>{
+      const m=Calc.margenProyecto(p.id);
+      const obj=+p.montoTotal||0;
+      const pctEjec=obj>0?m.egR/obj*100:0;
+      const margenPct=m.ingR>0?m.margenReal/m.ingR*100:0;
+      let estado="ok";
+      if(m.margenReal<0) estado="rojo";
+      else if(margenPct<15) estado="ambar";
+      return {codigo:p.codigo,cliente:empName(p.cliente_ref),tipo:p.tipo,obj,ingR:m.ingR,egR:m.egR,margen:m.margenReal,margenPct,estado,estadoProy:p.estado};
+    }).sort((a,b)=>a.margen-b.margen);
+  },
+  // aging CxC / CxP por tramo
+  aging(tipo){ // 'facturacion' | 'pago'
+    const hoy=new Date();
+    const tramos={"Por vencer":0,"0-30 vencido":0,"31-60 vencido":0,"+60 vencido":0};
+    const hitos=Store.all("hitos").filter(h=>h.tipo===tipo&&!["cobrado","pagado"].includes(h.estado));
+    hitos.forEach(h=>{
+      const f=h.fechaProg?new Date(h.fechaProg):null; const monto=+h.monto||0;
+      if(!f||f>=hoy){ tramos["Por vencer"]+=monto; return; }
+      const dd=Math.floor((hoy-f)/864e5);
+      if(dd<=30) tramos["0-30 vencido"]+=monto;
+      else if(dd<=60) tramos["31-60 vencido"]+=monto;
+      else tramos["+60 vencido"]+=monto;
+    });
+    return tramos;
+  },
+  // carga operativa por mes (proyectos activos con fecha en el mes)
+  cargaOperativa(){
+    const map={};
+    Store.all("proyectos").forEach(p=>{
+      if(!p.fechaIni) return; const d=new Date(p.fechaIni); if(isNaN(d)) return;
+      const k=mesNombre(d.getMonth())+" "+String(d.getFullYear()).slice(-2);
+      const sk=d.getFullYear()*12+d.getMonth();
+      if(!map[k]) map[k]={mes:k,n:0,monto:0,sort:sk};
+      map[k].n++; map[k].monto+=+p.montoTotal||0;
+    });
+    return Object.values(map).sort((a,b)=>a.sort-b.sort);
+  },
+  // estado de resultados simplificado (real)
+  eerr(){
+    let ingresos=0,costosDir=0,gastosGen=0;
+    Store.all("transacciones").filter(t=>t.real).forEach(t=>{
+      if(t.tipo==="ingreso") ingresos+=+t.monto||0;
+      else if(t.proyecto_ref) costosDir+=+t.monto||0;
+      else gastosGen+=+t.monto||0;
+    });
+    // egresos de tesorería sin proyecto = gastos generales
+    Store.all("mov_tesoreria").filter(m=>m.tipo==="egreso"&&!m.esTransfer).forEach(m=>gastosGen+=+m.monto||0);
+    const margenContrib=ingresos-costosDir;
+    const resultado=margenContrib-gastosGen;
+    return {ingresos,costosDir,margenContrib,gastosGen,resultado,
+      margenPct:ingresos>0?margenContrib/ingresos*100:0, resPct:ingresos>0?resultado/ingresos*100:0};
+  }
+};
+
+Views.reportes=function(){
+  UI.setHeader("Reportes de gestión","Comercial · Operativo · Financiero");
+  UI.setActions(`<button class="btn btn-ghost" onclick="Rep.exportXlsx()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6" stroke-linecap="round"/></svg>Exportar Excel</button>`);
+  UI.render(`
+    <div class="tabs" id="repTabs">
+      <div class="tab active" data-t="comercial">Comercial</div>
+      <div class="tab" data-t="operativo">Operativo</div>
+      <div class="tab" data-t="financiero">Financiero</div>
+    </div>
+    <div id="repHost"></div>`);
+  document.querySelectorAll('#repTabs .tab').forEach(t=>t.onclick=()=>{
+    document.querySelectorAll('#repTabs .tab').forEach(x=>x.classList.remove('active')); t.classList.add('active'); Rep.tab(t.dataset.t);
+  });
+  Rep.tab("comercial");
+};
+
+Rep.tab=function(t){
+  const h=document.getElementById('repHost');
+  if(t==="comercial") h.innerHTML=Rep._comercial();
+  if(t==="operativo") h.innerHTML=Rep._operativo();
+  if(t==="financiero") h.innerHTML=Rep._financiero();
+  setTimeout(()=>Rep._draw(t),50);
+};
+
+Rep._card=function(titulo,desc,inner){
+  return `<div class="card card-pad" style="margin-bottom:16px">
+    <div class="rep-head"><div><div class="sect-title" style="margin-bottom:2px">${titulo}</div><div class="rep-desc">${desc}</div></div></div>
+    ${inner}</div>`;
+};
+
+/* ---------- COMERCIAL ---------- */
+Rep._comercial=function(){
+  const emb=Rep.embudo();
+  const wr=Rep.winRate(), wrt=Rep.winRatePorTipo();
+  const rent=Rep.rentabilidadTipo();
+  const conc=Rep.concentracion();
+  const pondTotal=emb.reduce((s,e)=>s+e.monto*e.prob/100,0);
+
+  return `
+  ${Rep._card("1 · Embudo de conversión","Propuestas por etapa, su valor y probabilidad. Detecta si pierdes en generación o en cierre.",
+    `<div class="funnel">${emb.map(e=>`
+      <div class="funnel-row">
+        <div class="funnel-label">${e.etapa}</div>
+        <div class="funnel-bar"><div class="funnel-fill" style="width:${Math.max(8,e.prob)}%">${e.n}</div></div>
+        <div class="funnel-val">${fmt(e.monto)}</div>
+      </div>`).join("")}</div>`)}
+
+  ${Rep._card("2 · Pipeline ponderado vs valor total","Pronóstico realista de ventas: valor ajustado por probabilidad de cierre.",
+    `<div class="grid g2">
+      <div class="mini-stat"><span class="l">Valor total en pipeline</span><span class="v" style="font-size:22px">${fmt(emb.reduce((s,e)=>s+e.monto,0))}</span></div>
+      <div class="mini-stat"><span class="l">Ponderado por probabilidad</span><span class="v" style="font-size:22px;color:var(--orange-deep)">${fmt(pondTotal)}</span></div>
+    </div>`)}
+
+  ${Rep._card("3 · Win rate por tipo de servicio","Dónde tienes ventaja real y dónde quemas tiempo cotizando.",
+    `<div class="grid g2" style="margin-bottom:14px">
+      <div class="mini-stat"><span class="l">Win rate global</span><span class="v" style="font-size:22px;color:var(--green)">${fmtPct(wr.rate)}</span><span class="l">${wr.ganadas} ganadas / ${wr.perdidas} perdidas</span></div>
+    </div>
+    ${wrt.length?`<div class="tbl-wrap" style="border:none"><table><thead><tr><th>Tipo</th><th class="num">Ganadas</th><th class="num">Perdidas</th><th class="num">Win rate</th></tr></thead>
+      <tbody>${wrt.map(r=>`<tr><td class="t-strong">${r.tipo} · ${esc(r.label)}</td><td class="num">${r.ganadas}</td><td class="num">${r.perdidas}</td><td class="num t-strong" style="color:${r.rate>=50?'var(--green)':'var(--amber)'}">${fmtPct(r.rate)}</td></tr>`).join("")}</tbody></table></div>`:'<div class="t-mut" style="font-size:13px">Aún no hay propuestas cerradas (ganadas o perdidas) para calcular win rate por tipo.</div>'}`)}
+
+  ${Rep._card("4 · Rentabilidad por tipo de servicio","No qué vendes más, sino qué te deja más margen. Reorienta tu oferta.",
+    `<canvas id="repRent" height="110"></canvas>
+    ${rent.length?`<div class="tbl-wrap" style="border:none;margin-top:14px"><table><thead><tr><th>Tipo</th><th class="num">Proyectos</th><th class="num">Ingreso real</th><th class="num">Margen</th><th class="num">% Margen</th></tr></thead>
+      <tbody>${rent.map(r=>`<tr><td class="t-strong">${r.tipo}</td><td class="num">${r.n}</td><td class="num">${fmt(r.ingreso)}</td><td class="num t-strong" style="color:${r.margen>=0?'var(--green)':'var(--red)'}">${fmt(r.margen)}</td><td class="num">${fmtPct(r.pct)}</td></tr>`).join("")}</tbody></table></div>`:'<div class="t-mut" style="font-size:13px;margin-top:10px">Sin proyectos con margen calculable aún.</div>'}`)}
+
+  ${Rep._card("5 · Concentración de cartera","Riesgo estratégico: cuánto dependes de un solo cliente.",
+    conc.items.length?`<div style="display:flex;gap:20px;flex-wrap:wrap;align-items:center">
+      <canvas id="repConc" height="180" style="max-width:220px"></canvas>
+      <div style="flex:1;min-width:200px">${conc.items.slice(0,6).map(c=>`
+        <div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px"><span class="t-strong">${esc(c.cli)}</span><span class="mono">${fmtPct(c.pct)}</span></div>
+        <div class="bar"><div class="bar-fill" style="width:${c.pct}%;background:${c.pct>50?'var(--red)':'var(--orange)'}"></div></div></div>`).join("")}
+        ${conc.items[0]&&conc.items[0].pct>50?`<div class="rep-alert">⚠ ${esc(conc.items[0].cli)} concentra ${fmtPct(conc.items[0].pct)} de tus ingresos. Diversificar es prioridad estratégica.</div>`:''}
+      </div>
+    </div>`:'<div class="t-mut" style="font-size:13px">Sin ingresos registrados aún.</div>')}
+  `;
+};
+
+/* ---------- OPERATIVO ---------- */
+Rep._operativo=function(){
+  const sem=Rep.semaforoProyectos();
+  const carga=Rep.cargaOperativa();
+  const hoy=new Date();
+  const hitosVenc=Store.all("hitos").filter(h=>!["cobrado","pagado"].includes(h.estado)&&h.fechaProg).map(h=>{
+    const p=Store.get("proyectos",h.proyecto_ref); const dd=Math.floor((hoy-new Date(h.fechaProg))/864e5);
+    return {h,p,dd,sence:p&&["NORM","LMS","OPER"].includes(p.tipo)};
+  }).sort((a,b)=>b.dd-a.dd);
+
+  return `
+  ${Rep._card("6 · Semáforo de margen por proyecto","El proyecto que se come el margen aparece en rojo antes de cerrar en pérdida.",
+    sem.length?`<div class="tbl-wrap" style="border:none"><table><thead><tr><th></th><th>Proyecto</th><th>Cliente</th><th class="num">Ingreso</th><th class="num">Egreso</th><th class="num">Margen</th><th class="num">%</th></tr></thead>
+      <tbody>${sem.map(s=>`<tr>
+        <td><span class="dot ${s.estado}"></span></td>
+        <td class="t-strong mono" style="font-size:11px">${esc(s.codigo)}</td><td>${esc(s.cliente)}</td>
+        <td class="num">${fmt(s.ingR)}</td><td class="num">${fmt(s.egR)}</td>
+        <td class="num t-strong" style="color:${s.margen>=0?'var(--green)':'var(--red)'}">${fmt(s.margen)}</td>
+        <td class="num">${fmtPct(s.margenPct)}</td>
+      </tr>`).join("")}</tbody></table></div>
+      <div class="rep-legend"><span><span class="dot ok"></span>Saludable</span><span><span class="dot ambar"></span>Margen &lt;15%</span><span><span class="dot rojo"></span>Margen negativo</span></div>`:'<div class="t-mut" style="font-size:13px">Sin proyectos aún.</div>')}
+
+  ${Rep._card("7 · Avance de hitos vs calendario","Hitos vencidos o por vencer. Prevención de no-pago, con alerta SENCE 40 días.",
+    hitosVenc.length?`<div class="tbl-wrap" style="border:none"><table><thead><tr><th>Tipo</th><th>Proyecto</th><th>Hito</th><th class="num">Monto</th><th>Estado</th></tr></thead>
+      <tbody>${hitosVenc.slice(0,12).map(x=>`<tr>
+        <td><span class="badge ${x.h.tipo==='facturacion'?'b-green':'b-red'}">${x.h.tipo==='facturacion'?'Facturar':'Pagar'}</span></td>
+        <td class="t-strong mono" style="font-size:11px">${esc(x.p?x.p.codigo:'—')}</td><td class="t-mut">${esc(x.h.desc||'')}</td>
+        <td class="num">${fmt(x.h.monto)}</td>
+        <td><span class="badge ${x.dd>0?'b-red':x.dd>-5?'b-amber':'b-gray'}">${x.dd>0?'Vencido '+x.dd+'d':'En '+Math.abs(x.dd)+'d'}</span>${x.sence&&x.h.tipo==='facturacion'?' <span class="badge b-orange">SENCE</span>':''}</td>
+      </tr>`).join("")}</tbody></table></div>`:'<div class="t-mut" style="font-size:13px">Sin hitos pendientes.</div>')}
+
+  ${Rep._card("8 · Carga operativa por período","Proyectos concurrentes y volumen. Anticipa necesidad de capacidad.",
+    `<canvas id="repCarga" height="100"></canvas>
+    ${carga.length?`<div class="tbl-wrap" style="border:none;margin-top:14px"><table><thead><tr><th>Mes inicio</th><th class="num">Proyectos</th><th class="num">Volumen</th></tr></thead>
+      <tbody>${carga.map(c=>`<tr><td class="t-strong">${c.mes}</td><td class="num">${c.n}</td><td class="num">${fmt(c.monto)}</td></tr>`).join("")}</tbody></table></div>`:'<div class="t-mut" style="font-size:13px;margin-top:10px">Proyectos sin fecha de inicio registrada.</div>'}`)}
+  `;
+};
+
+/* ---------- FINANCIERO ---------- */
+Rep._financiero=function(){
+  const pos=Tes.posicionTotal();
+  const proy=Tes.proyeccion();
+  const runway=Tes.runwayMeses();
+  const quema=Tes.quemaMensual();
+  const agCxC=Rep.aging("facturacion"), agCxP=Rep.aging("pago");
+  const er=Rep.eerr();
+  const cuentas=Store.all("cuentas");
+
+  return `
+  ${Rep._card("9 · Posición de caja consolidada","Saldo real de todas las cuentas hoy. Punto de partida de toda decisión.",
+    cuentas.length?`<div class="grid g2" style="margin-bottom:12px"><div class="mini-stat"><span class="l">Total disponible</span><span class="v" style="font-size:24px;color:${pos>=0?'var(--green)':'var(--red)'}">${fmt(pos)}</span></div></div>
+    <div class="tbl-wrap" style="border:none"><table><tbody>${cuentas.map(c=>`<tr><td class="t-strong">${esc(c.nombre)}</td><td class="t-mut">${esc(c.tipo)}</td><td class="num t-strong">${fmt(Tes.saldoCuenta(c.id))}</td></tr>`).join("")}</tbody></table></div>`:'<div class="t-mut" style="font-size:13px">Sin cuentas en Tesorería. <a onclick="Router.go(\'tesoreria\')" style="color:var(--orange);cursor:pointer">Crear una →</a></div>')}
+
+  ${Rep._card("10 · Flujo de caja proyectado 30/60/90","¿Llego a fin de mes? Saldo real más cobros y pagos esperados.",
+    `<canvas id="repFlujoProy" height="90"></canvas>
+    <div class="tbl-wrap" style="border:none;margin-top:14px"><table><thead><tr><th>Horizonte</th><th class="num">Cobros</th><th class="num">Pagos</th><th class="num">Saldo proy.</th><th>Estado</th></tr></thead>
+      <tbody>${proy.res.map(r=>`<tr><td class="t-strong">${r.dias} días</td><td class="num" style="color:var(--green)">+${fmt(r.ing)}</td><td class="num" style="color:var(--red)">−${fmt(r.eg)}</td><td class="num t-strong">${fmt(r.saldoProy)}</td>
+        <td><span class="badge ${r.saldoProy<0?'b-red':r.saldoProy<(quema||1)?'b-amber':'b-green'}">${r.saldoProy<0?'Negativa':r.saldoProy<(quema||1)?'Ajustada':'Saludable'}</span></td></tr>`).join("")}</tbody></table></div>`)}
+
+  ${Rep._card("11 · Aging de cuentas por cobrar","A quién cobrar hoy. La plata vencida hace 60 días casi no se cobra.",
+    `<div class="aging">${Object.entries(agCxC).map(([k,v])=>`<div class="aging-col ${k.includes('+60')?'crit':k.includes('31-60')?'warn':''}"><div class="aging-v">${fmt(v)}</div><div class="aging-l">${k}</div></div>`).join("")}</div>`)}
+
+  ${Rep._card("12 · Aging de cuentas por pagar","Tus compromisos por antigüedad. A quién pagar y a quién pedir plazo.",
+    `<div class="aging">${Object.entries(agCxP).map(([k,v])=>`<div class="aging-col ${k.includes('+60')?'crit':k.includes('31-60')?'warn':''}"><div class="aging-v">${fmt(v)}</div><div class="aging-l">${k}</div></div>`).join("")}</div>`)}
+
+  ${Rep._card("13 · Runway / días de caja","Cuántos meses operas con la caja actual. El número que casi nadie mira.",
+    `<div class="grid g3">
+      <div class="mini-stat"><span class="l">Runway</span><span class="v" style="font-size:24px;color:${runway===Infinity?'var(--green)':runway<3?'var(--red)':runway<6?'var(--amber)':'var(--green)'}">${runway===Infinity?'∞':runway.toFixed(1)+' meses'}</span></div>
+      <div class="mini-stat"><span class="l">Caja actual</span><span class="v" style="font-size:20px">${fmt(pos)}</span></div>
+      <div class="mini-stat"><span class="l">Quema mensual</span><span class="v" style="font-size:20px;color:var(--red)">${fmt(quema)}</span></div>
+    </div>${runway!==Infinity&&runway<3?`<div class="rep-alert">⚠ Menos de 3 meses de caja al ritmo actual. Acelera cobros o reduce quema.</div>`:''}`)}
+
+  ${Rep._card("14 · Estado de resultados simplificado","¿El negocio es sano o solo tiene movimiento? Real acumulado.",
+    `<div class="eerr">
+      <div class="eerr-row"><span>Ingresos</span><span class="num t-strong">${fmt(er.ingresos)}</span></div>
+      <div class="eerr-row sub"><span>(−) Costos directos de proyectos</span><span class="num" style="color:var(--red)">−${fmt(er.costosDir)}</span></div>
+      <div class="eerr-row total"><span>= Margen de contribución</span><span class="num t-strong">${fmt(er.margenContrib)} <span class="t-mut" style="font-weight:400">(${fmtPct(er.margenPct)})</span></span></div>
+      <div class="eerr-row sub"><span>(−) Gastos generales</span><span class="num" style="color:var(--red)">−${fmt(er.gastosGen)}</span></div>
+      <div class="eerr-row total final"><span>= Resultado</span><span class="num t-strong" style="color:${er.resultado>=0?'var(--green)':'var(--red)'}">${fmt(er.resultado)} <span class="t-mut" style="font-weight:400">(${fmtPct(er.resPct)})</span></span></div>
+    </div>`)}
+  `;
+};
+
+Rep._draw=function(t){
+  if(typeof Chart==='undefined') return;
+  if(t==="comercial"){
+    const rent=Rep.rentabilidadTipo();
+    const c1=document.getElementById('repRent');
+    if(c1&&rent.length){ if(Rep._c1)Rep._c1.destroy(); Rep._c1=new Chart(c1,{type:'bar',data:{labels:rent.map(r=>r.tipo),datasets:[{label:'Margen',data:rent.map(r=>r.margen),backgroundColor:rent.map(r=>r.margen>=0?'#1F9D6B':'#D6453A')}]},options:{...chartOpts(),indexAxis:'y',plugins:{legend:{display:false}}}}); }
+    const conc=Rep.concentracion(); const c2=document.getElementById('repConc');
+    if(c2&&conc.items.length){ if(Rep._c2)Rep._c2.destroy(); Rep._c2=new Chart(c2,{type:'doughnut',data:{labels:conc.items.slice(0,6).map(c=>c.cli),datasets:[{data:conc.items.slice(0,6).map(c=>c.monto),backgroundColor:['#E8490F','#2D3142','#1F9D6B','#2563EB','#E0A106','#7C3AED']}]},options:{plugins:{legend:{display:false}}}}); }
+  }
+  if(t==="operativo"){
+    const carga=Rep.cargaOperativa(); const c=document.getElementById('repCarga');
+    if(c&&carga.length){ if(Rep._c3)Rep._c3.destroy(); Rep._c3=new Chart(c,{type:'bar',data:{labels:carga.map(x=>x.mes),datasets:[{label:'Proyectos',data:carga.map(x=>x.n),backgroundColor:'#2563EB',yAxisID:'y'},{label:'Volumen',type:'line',data:carga.map(x=>x.monto),borderColor:'#E8490F',backgroundColor:'transparent',yAxisID:'y1',tension:.3}]},options:{responsive:true,plugins:{legend:{labels:{font:{size:11},boxWidth:12}}},scales:{y:{position:'left',ticks:{font:{size:10}}},y1:{position:'right',ticks:{callback:v=>'$'+(v/1e6).toFixed(0)+'M',font:{size:10}},grid:{drawOnChartArea:false}}}}}); }
+  }
+  if(t==="financiero"){
+    const c=document.getElementById('repFlujoProy'); const p=Tes.proyeccion();
+    if(c){ if(Rep._c4)Rep._c4.destroy(); Rep._c4=new Chart(c,{type:'line',data:{labels:['Hoy','30d','60d','90d'],datasets:[{label:'Saldo proyectado',data:[p.base,p.res[0].saldoProy,p.res[1].saldoProy,p.res[2].saldoProy],borderColor:'#E8490F',backgroundColor:'rgba(232,73,15,.08)',fill:true,tension:.3,borderWidth:2,pointRadius:4}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'$'+(v/1e6).toFixed(1)+'M',font:{size:10}}}}}}); }
+  }
+};
+
+Rep.exportXlsx=function(){
+  const wb=XLSX.utils.book_new();
+  const add=(name,rows)=>{ if(rows.length) XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),name.slice(0,30)); };
+  add("Embudo",Rep.embudo().map(e=>({Etapa:e.etapa,Propuestas:e.n,Monto:e.monto,Probabilidad:e.prob+"%"})));
+  add("WinRate x Tipo",Rep.winRatePorTipo().map(r=>({Tipo:r.tipo,Ganadas:r.ganadas,Perdidas:r.perdidas,WinRate:r.rate.toFixed(1)+"%"})));
+  add("Rentabilidad x Tipo",Rep.rentabilidadTipo().map(r=>({Tipo:r.tipo,Proyectos:r.n,Ingreso:r.ingreso,Margen:r.margen,PctMargen:r.pct.toFixed(1)+"%"})));
+  add("Concentracion",Rep.concentracion().items.map(c=>({Cliente:c.cli,Ingreso:c.monto,Pct:c.pct.toFixed(1)+"%"})));
+  add("Semaforo Proyectos",Rep.semaforoProyectos().map(s=>({Codigo:s.codigo,Cliente:s.cliente,Tipo:s.tipo,Ingreso:s.ingR,Egreso:s.egR,Margen:s.margen,Estado:s.estado})));
+  add("Carga Operativa",Rep.cargaOperativa().map(c=>({Mes:c.mes,Proyectos:c.n,Volumen:c.monto})));
+  const ag=t=>Object.entries(Rep.aging(t)).map(([k,v])=>({Tramo:k,Monto:v}));
+  add("Aging CxC",ag("facturacion")); add("Aging CxP",ag("pago"));
+  const er=Rep.eerr();
+  add("Estado Resultados",[{Concepto:"Ingresos",Monto:er.ingresos},{Concepto:"Costos directos",Monto:-er.costosDir},{Concepto:"Margen contribucion",Monto:er.margenContrib},{Concepto:"Gastos generales",Monto:-er.gastosGen},{Concepto:"Resultado",Monto:er.resultado}]);
+  const proy=Tes.proyeccion();
+  add("Flujo Proyectado",proy.res.map(r=>({Horizonte:r.dias+" dias",Cobros:r.ing,Pagos:r.eg,SaldoProyectado:r.saldoProy})));
+  add("Tesoreria",[{Indicador:"Posicion caja",Valor:Tes.posicionTotal()},{Indicador:"Quema mensual",Valor:Tes.quemaMensual()},{Indicador:"Runway meses",Valor:Tes.runwayMeses()===Infinity?"Infinito":Tes.runwayMeses().toFixed(1)}]);
+  XLSX.writeFile(wb,"akadem_reportes_"+todayISO()+".xlsx"); toast("Reportes exportados","ok");
 };
 
 /* =====================================================================
