@@ -217,6 +217,48 @@ tbody tr:hover{background:var(--row-hover)}
 .read-only-hide{display:initial}
 body.role-viewer .read-only-hide{display:none!important}
 
+/* sync indicator */
+.sync-ind{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--muted);background:var(--light);border:1px solid var(--border);border-radius:20px;padding:4px 11px}
+.sync-ind .sync-d{width:7px;height:7px;border-radius:50%;background:var(--amber);animation:pulse 1s infinite}
+.sync-ind.err{color:var(--red);background:var(--red-soft);border-color:#f3c9c4}
+.sync-ind.err .sync-d{background:var(--red);animation:none}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* confirm detail box */
+.conf-detail{background:var(--light);border:1px solid var(--border);border-left:3px solid var(--blue);border-radius:8px;padding:11px 13px;font-size:13px;color:var(--navy-soft);line-height:1.5}
+.conf-detail.danger{border-left-color:var(--red);background:var(--red-soft);color:#9a2820}
+.btn-danger-solid{background:var(--red);color:#fff}
+.btn-danger-solid:hover{background:#bf3a30}
+.btn-danger-solid:disabled{opacity:.45;cursor:not-allowed}
+
+/* sortable th */
+th.sortable{cursor:pointer;user-select:none;white-space:nowrap}
+th.sortable:hover{color:var(--orange-deep)}
+th.sortable .arr{opacity:.4;font-size:10px;margin-left:3px}
+th.sortable.asc .arr,th.sortable.desc .arr{opacity:1;color:var(--orange)}
+
+/* audit line */
+.audit{font-size:11.5px;color:var(--muted);display:flex;align-items:center;gap:6px;margin-top:2px}
+.audit svg{width:12px;height:12px;stroke-width:2}
+
+/* sidebar collapse (desktop) */
+body.sb-collapsed .sidebar{width:64px}
+body.sb-collapsed .sb-item span,body.sb-collapsed .sb-sec,body.sb-collapsed .sb-brand .bn,body.sb-collapsed .sb-user>div,body.sb-collapsed .sb-logout span{display:none}
+body.sb-collapsed .sb-item{justify-content:center}
+body.sb-collapsed .sb-brand{justify-content:center}
+.sb-collapse-btn{position:absolute;top:18px;right:-11px;width:22px;height:22px;border-radius:50%;background:var(--white);border:1px solid var(--border);display:none;align-items:center;justify-content:center;color:var(--navy-soft);z-index:5;box-shadow:0 1px 4px rgba(0,0,0,.1)}
+.sb-collapse-btn svg{width:13px;height:13px;stroke-width:2.5;transition:transform .2s}
+body.sb-collapsed .sb-collapse-btn svg{transform:rotate(180deg)}
+@media(min-width:901px){.sb-collapse-btn{display:flex}}
+
+/* tx tipo toggle */
+.tx-toggle{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tx-opt{display:flex;align-items:center;justify-content:center;gap:7px;padding:12px;border:1.5px solid var(--border);border-radius:10px;background:var(--white);font-weight:600;font-size:14px;color:var(--muted);transition:all .14s}
+.tx-opt svg{width:17px;height:17px}
+.tx-opt:hover{border-color:var(--navy-soft)}
+.tx-opt.active[data-v="ingreso"]{border-color:var(--green);background:var(--green-soft);color:var(--green)}
+.tx-opt.active[data-v="egreso"]{border-color:var(--red);background:var(--red-soft);color:var(--red)}
+
 @media(max-width:900px){
   .sidebar{position:fixed;left:-240px;z-index:300;transition:left .25s;box-shadow:var(--shadow-lg)}
   .sidebar.open{left:0}
@@ -273,6 +315,9 @@ body.role-viewer .read-only-hide{display:none!important}
   <div class="shell">
     <!-- SIDEBAR -->
     <aside class="sidebar" id="sidebar">
+      <button class="sb-collapse-btn" onclick="UI.toggleCollapse()" title="Colapsar menú">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15 18l-6-6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
       <div class="sb-brand">
         <svg width="32" height="32" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M30 8L18 18L15 38L30 52L45 38L42 18Z" stroke="#fff" stroke-width="2.5" fill="none"/>
@@ -312,6 +357,7 @@ body.role-viewer .read-only-hide{display:none!important}
           </div>
         </div>
         <div class="tb-actions" id="pageActions"></div>
+        <div class="sync-ind" id="syncDot" style="display:none"></div>
       </header>
       <main class="content" id="content">
         <div class="loading"><div class="spin"></div><div>Cargando…</div></div>
@@ -328,6 +374,20 @@ body.role-viewer .read-only-hide{display:none!important}
     </button></div>
     <div class="modal-body" id="modalBody"></div>
     <div class="modal-foot" id="modalFoot"></div>
+  </div>
+</div>
+
+<!-- CONFIRM propio -->
+<div class="modal-bg" id="confBg">
+  <div class="modal" style="max-width:460px">
+    <div class="modal-head"><h3 id="confTitle">Confirmar</h3><button class="modal-x" onclick="Confirm._done(false)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"/></svg>
+    </button></div>
+    <div class="modal-body" id="confBody"></div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="Confirm._done(false)">Cancelar</button>
+      <button class="btn btn-o" id="confOk" onclick="Confirm._done(true)">Confirmar</button>
+    </div>
   </div>
 </div>
 
@@ -471,24 +531,43 @@ const Store = {
   all(col){ return Object.values(this.data[col]||{}); },
   get(col,id){ return (this.data[col]||{})[id]||null; },
 
+  _syncPending:0,
+  _syncErr:false,
+
   async set(col,doc){
     if(!doc.id) doc.id=uid();
     const now=nowISO();
     if(!doc.createdAt){ doc.createdAt=now; doc.createdBy=this.user?this.user.email:"system"; }
     doc.updatedAt=now;
+    if(this.user) doc.updatedBy=this.user.email;
     this.data[col][doc.id]=doc;
-    if(fbReady && db){
-      try{ await db.collection(col).doc(doc.id).set(doc); }
-      catch(e){ console.warn("Firestore set falló:",e.message); }
-    }
     this._cacheToLS();
+    if(fbReady && db){
+      this._syncStart();
+      try{ await db.collection(col).doc(doc.id).set(doc); this._syncOk(); }
+      catch(e){ console.warn("Firestore set falló:",e.message); this._syncFail(); throw e; }
+    }
     return doc;
   },
 
   async del(col,id){
     delete this.data[col][id];
-    if(fbReady && db){ try{ await db.collection(col).doc(id).delete(); }catch(e){} }
     this._cacheToLS();
+    if(fbReady && db){
+      this._syncStart();
+      try{ await db.collection(col).doc(id).delete(); this._syncOk(); }
+      catch(e){ this._syncFail(); throw e; }
+    }
+  },
+
+  _syncStart(){ this._syncPending++; this._renderSync(); },
+  _syncOk(){ this._syncPending=Math.max(0,this._syncPending-1); this._syncErr=false; this._renderSync(); },
+  _syncFail(){ this._syncPending=Math.max(0,this._syncPending-1); this._syncErr=true; this._renderSync(); },
+  _renderSync(){
+    const el=document.getElementById('syncDot'); if(!el) return;
+    if(this._syncErr){ el.style.display='inline-flex'; el.className='sync-ind err'; el.innerHTML='<span class="sync-d"></span>Error al sincronizar'; return; }
+    if(this._syncPending>0){ el.style.display='inline-flex'; el.className='sync-ind'; el.innerHTML='<span class="sync-d"></span>Sincronizando…'; }
+    else{ el.style.display='none'; }
   },
 
   /* ---- contador secuencial para códigos de proyecto ---- */
@@ -584,6 +663,7 @@ const Auth = {
     document.getElementById('gate').style.display="none";
     document.getElementById('app').style.display="block";
     document.body.className="role-"+u.rol;
+    UI.restoreCollapse();
     Router.go(localStorage.getItem('erp_last_view')||"dashboard");
   },
 
@@ -679,7 +759,9 @@ const UI = {
   setActions(html){ document.getElementById('pageActions').innerHTML=Auth.can("write")?html:""; },
   render(html){ document.getElementById('content').innerHTML=html; },
   openSidebar(){ document.getElementById('sidebar').classList.add('open'); document.getElementById('sbBackdrop').classList.add('show'); },
-  closeSidebar(){ document.getElementById('sidebar').classList.remove('open'); document.getElementById('sbBackdrop').classList.remove('show'); }
+  closeSidebar(){ document.getElementById('sidebar').classList.remove('open'); document.getElementById('sbBackdrop').classList.remove('show'); },
+  toggleCollapse(){ document.body.classList.toggle('sb-collapsed'); localStorage.setItem('erp_sb_collapsed',document.body.classList.contains('sb-collapsed')?'1':'0'); },
+  restoreCollapse(){ if(localStorage.getItem('erp_sb_collapsed')==='1') document.body.classList.add('sb-collapsed'); }
 };
 
 const Modal = {
@@ -694,12 +776,53 @@ const Modal = {
 };
 document.getElementById('modalBg').addEventListener('click',e=>{ if(e.target.id==="modalBg") Modal.close(); });
 
+/* ---------- CONFIRM propio (reemplaza confirm/prompt nativos) ----------
+   Confirm.ask({title, message, detail, danger, word, okLabel}) → Promise<bool>
+   - detail: línea explicando la consecuencia (punto 3 UX)
+   - word: si se define, exige escribir esa palabra para habilitar OK
+*/
+const Confirm = {
+  _resolve:null,
+  ask(opts){
+    return new Promise(resolve=>{
+      this._resolve=resolve;
+      const danger=!!opts.danger;
+      const needWord=opts.word;
+      document.getElementById('confTitle').textContent=opts.title||"Confirmar";
+      document.getElementById('confBody').innerHTML=`
+        <p style="font-size:14px;color:var(--ink);margin-bottom:${opts.detail||needWord?'12px':'0'}">${opts.message||""}</p>
+        ${opts.detail?`<div class="conf-detail ${danger?'danger':''}">${opts.detail}</div>`:""}
+        ${needWord?`<div class="fg" style="margin-top:14px"><label>Para confirmar, escribe <b>${esc(needWord)}</b></label>
+          <input id="confWord" autocomplete="off" oninput="Confirm._checkWord('${esc(needWord)}')" placeholder="${esc(needWord)}"></div>`:""}`;
+      const okBtn=document.getElementById('confOk');
+      okBtn.textContent=opts.okLabel||(danger?"Eliminar":"Confirmar");
+      okBtn.className="btn "+(danger?"btn-danger-solid":"btn-o");
+      okBtn.disabled=!!needWord;
+      document.getElementById('confBg').classList.add('show');
+      if(needWord) setTimeout(()=>document.getElementById('confWord')?.focus(),60);
+    });
+  },
+  _checkWord(w){ document.getElementById('confOk').disabled=(document.getElementById('confWord').value!==w); },
+  _done(val){ document.getElementById('confBg').classList.remove('show'); if(this._resolve){ this._resolve(val); this._resolve=null; } }
+};
+
 /* ---------- empty state helper ---------- */
 function emptyState(title,sub,btn){
   return `<div class="card card-pad"><div class="empty">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11H3v10h6V11zM21 3h-6v18h6V3zM15 7H9v14h6V7z"/></svg>
     <h4>${title}</h4><p>${sub||""}</p>${btn?`<div style="margin-top:14px">${btn}</div>`:""}
   </div></div>`;
+}
+
+/* ---------- audit line: "creado por X · fecha" ---------- */
+function auditLine(doc){
+  if(!doc||(!doc.createdBy&&!doc.createdAt)) return "";
+  const who=(doc.createdBy||"—").split('@')[0];
+  let s=`creado por ${esc(who)} · ${fmtFecha(doc.createdAt)}`;
+  if(doc.updatedBy && doc.updatedAt && doc.updatedAt!==doc.createdAt){
+    s+=` · editado por ${esc((doc.updatedBy||'').split('@')[0])} ${fmtFecha(doc.updatedAt)}`;
+  }
+  return `<div class="audit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>${s}</div>`;
 }
 
 /* ---------- placeholder Views/Seed (definidos en erp_modules.js) ---------- */
@@ -836,7 +959,7 @@ Views.dashboard=function(){
           const p=Store.get("proyectos",h.proyecto_ref);
           const dd=Math.round((new Date(h.fechaProg)-new Date())/(1000*60*60*24));
           const sence=p&&["NORM","LMS","OPER"].includes(p.tipo);
-          return `<tr>
+          return `<tr style="cursor:pointer" onclick="Dash.irAHito('${h.proyecto_ref}')" title="Abrir proyecto">
             <td><span class="badge ${h.tipo==='facturacion'?'b-green':'b-red'}">${h.tipo==='facturacion'?'Facturar':'Pagar'}</span></td>
             <td class="t-strong">${esc(p?p.codigo:'—')}</td>
             <td class="t-mut">${esc(h.desc||'')}</td>
@@ -861,6 +984,7 @@ Views.dashboard=function(){
 
 const Dash={
   _f:null,_t:null,_c:null,
+  irAHito(pid){ Router.go("proyectos"); setTimeout(()=>{ Proyectos.detail(pid); setTimeout(()=>document.querySelector('#proyTabs .tab[data-t="hitos"]')?.click(),150); },150); },
   drawFlujo(g){
     const serie=Calc.flujoSerie(g);
     const ctx=document.getElementById('chFlujo'); if(!ctx||typeof Chart==='undefined') return;
@@ -1024,6 +1148,7 @@ const Pipeline={
         <div class="t-strong">${esc(p.titulo||'Sin título')}</div>
         <div class="t-mut" style="margin-top:6px;font-size:13px">${esc(p.notas||'Sin notas')}</div>
         <div class="t-mut" style="margin-top:8px;font-size:12px">Responsable: ${esc(p.responsable||'—')}</div>
+        ${auditLine(p)}
       </div>
       <div class="sect-title" style="font-size:14px">Seguimiento</div>
       <div style="display:flex;gap:8px;margin-bottom:12px">
@@ -1048,7 +1173,11 @@ const Pipeline={
     await Store.set("propuestas",p); this.detail(id);
   },
   async del(id){
-    if(!confirm("¿Eliminar esta propuesta?")) return;
+    const p=Store.get("propuestas",id);
+    const ok=await Confirm.ask({title:"Eliminar propuesta",danger:true,
+      message:"¿Eliminar la propuesta de "+esc(empName(p.cliente_ref))+"?",
+      detail:"Se borrará del pipeline junto con su historial de seguimiento. Esta acción no se puede deshacer."});
+    if(!ok) return;
     await Store.del("propuestas",id); Modal.close(); toast("Eliminada"); Router.go("pipeline");
   },
 
@@ -1104,9 +1233,40 @@ Views.proyectos=function(){
     `<button class="btn btn-o" onclick="Router.go('pipeline')">Ir al Pipeline</button>`)); return; }
 
   UI.render(`
-    <div class="tbl-wrap"><table>
-      <thead><tr><th>Código</th><th>Cliente</th><th>Tipo</th><th>Estado</th><th class="num">Monto</th><th class="num">Ing. real</th><th class="num">Margen real</th><th>Hitos</th><th></th></tr></thead>
-      <tbody>${proys.map(p=>{
+    <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+      <div class="search-inp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3" stroke-linecap="round"/></svg><input id="proySearch" placeholder="Buscar código o cliente…" oninput="Proyectos.refresh()"></div>
+      <select id="proyEstadoF" onchange="Proyectos.refresh()" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:9px;outline:none"><option value="">Todos los estados</option><option value="activo">Activos</option><option value="en pausa">En pausa</option><option value="cerrado">Cerrados</option></select>
+    </div>
+    <div class="tbl-wrap" id="proyTblWrap"></div>`);
+  Proyectos._sort={key:"codigo",dir:1};
+  Proyectos.refresh();
+};
+
+const Proyectos={
+  _sort:{key:"codigo",dir:1},
+  setSort(key){ if(this._sort.key===key) this._sort.dir*=-1; else this._sort={key,dir:1}; this.refresh(); },
+  refresh(){
+    const q=(document.getElementById('proySearch')?.value||"").toLowerCase();
+    const ef=document.getElementById('proyEstadoF')?.value||"";
+    let list=Store.all("proyectos").filter(p=>
+      (!ef||p.estado===ef) &&
+      (!q||(p.codigo||"").toLowerCase().includes(q)||empName(p.cliente_ref).toLowerCase().includes(q)));
+    const sk=this._sort.key, dir=this._sort.dir;
+    const val=p=>{ const m=Calc.margenProyecto(p.id);
+      return {codigo:p.codigo||"",cliente:empName(p.cliente_ref),monto:+p.montoTotal||0,ing:m.ingR,margen:m.margenReal}[sk]; };
+    list.sort((a,b)=>{ const x=val(a),y=val(b); return (typeof x==="number"?x-y:String(x).localeCompare(String(y)))*dir; });
+    const arrow=k=>this._sort.key===k?(this._sort.dir>0?'<span class="arr">▲</span>':'<span class="arr">▼</span>'):'<span class="arr">⇅</span>';
+    const cls=k=>"sortable"+(this._sort.key===k?(this._sort.dir>0?" asc":" desc"):"");
+    document.getElementById('proyTblWrap').innerHTML=`<table>
+      <thead><tr>
+        <th class="${cls('codigo')}" onclick="Proyectos.setSort('codigo')">Código ${arrow('codigo')}</th>
+        <th class="${cls('cliente')}" onclick="Proyectos.setSort('cliente')">Cliente ${arrow('cliente')}</th>
+        <th>Tipo</th><th>Estado</th>
+        <th class="num ${cls('monto')}" onclick="Proyectos.setSort('monto')">Monto ${arrow('monto')}</th>
+        <th class="num ${cls('ing')}" onclick="Proyectos.setSort('ing')">Ing. real ${arrow('ing')}</th>
+        <th class="num ${cls('margen')}" onclick="Proyectos.setSort('margen')">Margen real ${arrow('margen')}</th>
+        <th>Hitos</th><th></th></tr></thead>
+      <tbody>${list.length?list.map(p=>{
         const m=Calc.margenProyecto(p.id);
         const hitos=Store.all("hitos").filter(h=>h.proyecto_ref===p.id);
         const pend=hitos.filter(h=>!["cobrado","pagado"].includes(h.estado)).length;
@@ -1121,11 +1281,8 @@ Views.proyectos=function(){
           <td>${hitos.length?`<span class="badge ${pend?'b-amber':'b-green'}">${hitos.length-pend}/${hitos.length}</span>`:'<span class="t-mut">—</span>'}</td>
           <td class="t-actions"><span class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 18l6-6-6-6" stroke-linecap="round"/></svg></span></td>
         </tr>`;
-      }).join("")}</tbody>
-    </table></div>`);
-};
-
-const Proyectos={
+      }).join(""):'<tr><td colspan="9" class="empty">Sin resultados</td></tr>'}</tbody></table>`;
+  },
   detail(id){
     const p=Store.get("proyectos",id); if(!p) return;
     const m=Calc.margenProyecto(p.id);
@@ -1172,7 +1329,8 @@ const Proyectos={
           <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:6px"><span>Ejecución de ingresos (real vs proyectado)</span><span>${m.ingP>0?Math.round(m.ingR/m.ingP*100):0}%</span></div>
           <div class="bar"><div class="bar-fill" style="width:${m.ingP>0?Math.min(100,m.ingR/m.ingP*100):0}%;background:var(--green)"></div></div>
           <div style="font-size:12px;color:var(--muted);margin-top:10px">${esc(p.condiciones||'Sin condiciones registradas')}</div>
-        </div>`;
+        </div>
+        ${auditLine(p)}`;
     }
     if(tab==="hitos"){
       const hitos=Store.all("hitos").filter(h=>h.proyecto_ref===id);
@@ -1245,22 +1403,36 @@ const Proyectos={
     toast("Hito guardado","ok"); Proyectos.detail(pid);
     setTimeout(()=>document.querySelector('#proyTabs .tab[data-t="hitos"]')?.click(),100);
   },
-  async hitoDel(pid,hid){ if(!confirm("¿Eliminar hito?"))return; await Store.del("hitos",hid); Proyectos.detail(pid); setTimeout(()=>document.querySelector('#proyTabs .tab[data-t="hitos"]')?.click(),100); },
+  async hitoDel(pid,hid){
+    const h=Store.get("hitos",hid);
+    const tipo=h.tipo==="facturacion"?"cuentas por cobrar":"cuentas por pagar";
+    const ok=await Confirm.ask({title:"Eliminar hito",danger:true,
+      message:"¿Eliminar el hito \""+esc(h.desc||'sin descripción')+"\"?",
+      detail:"Quitará "+fmt(h.monto)+" de "+tipo+" y de las alertas de vencimiento del proyecto."});
+    if(!ok) return;
+    await Store.del("hitos",hid); Proyectos.detail(pid); setTimeout(()=>document.querySelector('#proyTabs .tab[data-t="hitos"]')?.click(),100);
+  },
 
   txForm(pid){
     Modal.open("Registrar transacción",`
       <div class="form-grid">
-        <div class="form-row">
-          <div class="fg"><label>Tipo <span class="req">*</span></label><select id="t_tipo" onchange="Proyectos._txToggle()">
-            <option value="ingreso">Ingreso</option><option value="egreso">Egreso</option></select></div>
-          <div class="fg"><label>Naturaleza</label><select id="t_real"><option value="true">Real (ejecutado)</option><option value="false">Proyectado</option></select></div>
+        <div class="fg"><label>Tipo de movimiento <span class="req">*</span></label>
+          <div class="tx-toggle" id="t_tipoTog">
+            <button type="button" class="tx-opt active" data-v="ingreso" onclick="Proyectos._setTipo('ingreso')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7" stroke-linecap="round" stroke-linejoin="round"/></svg> Ingreso</button>
+            <button type="button" class="tx-opt" data-v="egreso" onclick="Proyectos._setTipo('egreso')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7 7 7-7" stroke-linecap="round" stroke-linejoin="round"/></svg> Egreso</button>
+          </div>
+          <input type="hidden" id="t_tipo" value="ingreso">
         </div>
         <div class="form-row">
-          <div class="fg"><label>Monto <span class="req">*</span></label><input id="t_monto" type="number"></div>
+          <div class="fg"><label>Monto <span class="req">*</span></label><input id="t_monto" type="number" inputmode="numeric" placeholder="0" onkeydown="if(event.key==='Enter')Proyectos.txSave('${pid}')"></div>
           <div class="fg"><label>Fecha</label><input id="t_fecha" type="date" value="${todayISO()}"></div>
         </div>
-        <div class="fg"><label>Concepto</label><input id="t_concepto" placeholder="Honorario relator / Pago plataforma…"></div>
-        <div class="fg" id="t_cpBox"><label>Contraparte</label>
+        <div class="fg"><label>¿Ya ocurrió o es una proyección?</label>
+          <select id="t_real"><option value="true">Ya ocurrió — dinero real</option><option value="false">Proyección — aún no ocurre</option></select></div>
+        <div class="fg"><label>Concepto</label><input id="t_concepto" placeholder="Ej: Anticipo OC 1134 / Honorario relator…"></div>
+        <div class="fg" id="t_cpBox"><label>Contraparte <span class="t-mut" style="font-weight:400">(opcional)</span></label>
           <select id="t_cp_tipo" onchange="Proyectos._txCp()">
             <option value="">— Sin contraparte —</option>
             <option value="empresa">Empresa</option>
@@ -1271,7 +1443,16 @@ const Proyectos={
         </div>
       </div>`,
       `<button class="btn btn-ghost" onclick="Modal.close()">Cancelar</button>
-       <button class="btn btn-o" onclick="Proyectos.txSave('${pid}')">Guardar</button>`);
+       <button class="btn btn-o" onclick="Proyectos.txSave('${pid}')">Guardar transacción</button>`);
+    setTimeout(()=>document.getElementById('t_monto')?.focus(),80);
+  },
+  _setTipo(v){
+    document.getElementById('t_tipo').value=v;
+    document.querySelectorAll('#t_tipoTog .tx-opt').forEach(b=>b.classList.toggle('active',b.dataset.v===v));
+    // preselección inteligente de contraparte: ingreso→empresa(cliente), egreso→categoría
+    const sel=document.getElementById('t_cp_tipo');
+    if(v==="ingreso" && !sel.value){ sel.value="empresa"; this._txCp(); }
+    if(v==="egreso" && (!sel.value||sel.value==="empresa")){ sel.value="categoria"; this._txCp(); }
   },
   _txCp(){
     const t=document.getElementById('t_cp_tipo').value; const host=document.getElementById('t_cpSel');
@@ -1294,7 +1475,15 @@ const Proyectos={
     Modal.close(); toast("Transacción registrada","ok"); Proyectos.detail(pid);
     setTimeout(()=>document.querySelector('#proyTabs .tab[data-t="tx"]')?.click(),100);
   },
-  async txDel(pid,tid){ if(!confirm("¿Eliminar transacción?"))return; await Store.del("transacciones",tid); Proyectos.detail(pid); setTimeout(()=>document.querySelector('#proyTabs .tab[data-t="tx"]')?.click(),100); },
+  async txDel(pid,tid){
+    const t=Store.get("transacciones",tid);
+    const signo=t.tipo==="ingreso"?"ingresos":"egresos";
+    const ok=await Confirm.ask({title:"Eliminar transacción",danger:true,
+      message:"¿Eliminar \""+esc(t.concepto||t.tipo)+"\"?",
+      detail:"Se restará "+fmt(t.monto)+" de los "+signo+(t.real?" reales":" proyectados")+" y el margen del proyecto se recalculará."});
+    if(!ok) return;
+    await Store.del("transacciones",tid); Proyectos.detail(pid); setTimeout(()=>document.querySelector('#proyTabs .tab[data-t="tx"]')?.click(),100);
+  },
 
   ocForm(pid){
     const oc=Store.all("ordenes_compra").find(o=>o.proyecto_ref===pid)||{};
@@ -1501,7 +1690,10 @@ const Facturacion={
           ${['proforma','emitida','cobrada','anulada'].map(s=>`<option value="${s}" ${f.estado===s?'selected':''}>${s}</option>`).join("")}</select></div>
         <div class="fg"><label>Folio SII (manual)</label><input id="fe_folio" value="${esc(f.folioSII||'')}" placeholder="N° de factura electrónica emitida"></div>
       </div>
-      <button class="btn btn-ghost btn-sm" disabled style="margin-top:14px;width:100%" title="Disponible en Fase 2">⚡ Emitir en SII (Fase 2)</button>`,
+      <div style="margin-top:16px;background:var(--blue-soft);border-radius:9px;padding:12px;display:flex;gap:10px;align-items:flex-start">
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" style="width:18px;height:18px;flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01" stroke-linecap="round"/></svg>
+        <div style="font-size:12px;color:var(--navy-soft)">La emisión electrónica directa al SII llegará en una próxima etapa. Por ahora emites la factura en tu sistema habitual y registras aquí el folio.</div>
+      </div>`,
       `<button class="btn btn-ghost" onclick="Modal.close()">Cancelar</button>
        <button class="btn btn-o" onclick="Facturacion.estadoSave('${id}')">Guardar</button>`);
   },
@@ -1638,7 +1830,12 @@ const Empresas={
   async del(id){
     const used=Store.all("propuestas").some(p=>p.cliente_ref===id)||Store.all("proyectos").some(p=>p.cliente_ref===id);
     if(used){ toast("No se puede: tiene propuestas o proyectos asociados","err"); return; }
-    if(!confirm("¿Eliminar empresa?"))return; await Store.del("empresas",id); toast("Eliminada"); Views.empresas();
+    const e=Store.get("empresas",id);
+    const ok=await Confirm.ask({title:"Eliminar empresa",danger:true,
+      message:"¿Eliminar a "+esc(e.razon)+"?",
+      detail:"No tiene propuestas ni proyectos asociados, así que es seguro eliminarla."});
+    if(!ok) return;
+    await Store.del("empresas",id); toast("Eliminada"); Views.empresas();
   }
 };
 
@@ -1705,7 +1902,15 @@ const Personas={
       nCuenta:document.getElementById('p_ncuenta').value});
     await Store.set("personas",p); Modal.close(); toast("Persona guardada","ok"); Views.personas();
   },
-  async del(id){ if(!confirm("¿Eliminar persona?"))return; await Store.del("personas",id); toast("Eliminada"); Views.personas(); }
+  async del(id){
+    const p=Store.get("personas",id);
+    const used=Store.all("transacciones").some(t=>t.persona_ref===id);
+    if(used){ toast("No se puede: tiene transacciones asociadas","err"); return; }
+    const ok=await Confirm.ask({title:"Eliminar persona",danger:true,message:"¿Eliminar a "+esc(p.nombre)+"?",
+      detail:"Se borrarán también sus datos de pago registrados."});
+    if(!ok) return;
+    await Store.del("personas",id); toast("Eliminada"); Views.personas();
+  }
 };
 
 /* =====================================================================
@@ -1718,6 +1923,7 @@ Views.config=function(){
     <div class="tabs" id="cfgTabs">
       <div class="tab active" data-t="users">Usuarios</div>
       <div class="tab" data-t="cats">Categorías de egreso</div>
+      <div class="tab" data-t="migra">Migración CashFlow</div>
       <div class="tab" data-t="backup">Respaldo y datos</div>
     </div>
     <div id="cfgHost"></div>`);
@@ -1744,6 +1950,18 @@ const Config={
         <div style="display:flex;gap:8px;margin-bottom:14px"><input id="cat_new" placeholder="Nueva categoría…" style="flex:1;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;outline:none"><button class="btn btn-soft" onclick="Config.addCat()">Añadir</button></div>
         <div style="display:flex;flex-wrap:wrap;gap:8px">${Store.all("categorias_egreso").map(c=>`<span class="chip">${esc(c.nombre)} <span onclick="Config.delCat('${c.id}')" style="cursor:pointer;color:var(--red);font-weight:700;margin-left:4px">×</span></span>`).join("")}</div></div>`;
     }
+    if(t==="migra"){
+      h.innerHTML=`<div class="card card-pad">
+        <div class="sect-title">Migración desde CashFlow Manager</div>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:14px">Pega el JSON exportado del documento <span class="mono">akadem/cashflow</span>. El CashFlow original no se modifica. La migración es idempotente: si la corres dos veces, no duplica registros.</p>
+        <textarea id="mig_raw" placeholder="Pega aquí el JSON completo del CashFlow…" style="width:100%;min-height:120px;padding:12px;border:1.5px solid var(--border);border-radius:10px;outline:none;font-family:'DM Mono',monospace;font-size:12px"></textarea>
+        <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap">
+          <button class="btn btn-ghost" onclick="Config.migPreview()">Analizar (previo)</button>
+          <button class="btn btn-o" id="mig_run" onclick="Config.migRun()" disabled>Ejecutar migración</button>
+        </div>
+        <div id="mig_result" style="margin-top:16px"></div>
+      </div>`;
+    }
     if(t==="backup"){
       const counts=COLLECTIONS.filter(c=>c!=="contadores").map(c=>`<div class="chip">${c}: <b>${Store.all(c).length}</b></div>`).join("");
       h.innerHTML=`<div class="card card-pad"><div class="sect-title">Respaldo y exportación</div>
@@ -1753,13 +1971,84 @@ const Config={
           <button class="btn btn-ghost" onclick="Config.exportXlsx()">Exportar todo (Excel)</button>
         </div>
         <div class="divider"></div>
-        <div style="font-size:12.5px;color:var(--muted)">${fbReady?'● Conectado a Firestore (akadem-erp). Los datos se sincronizan en la nube.':'● Modo local. Configura Firebase en erp_core.js para sincronizar entre dispositivos.'}</div>
+        <div style="font-size:12.5px;color:var(--muted);margin-bottom:14px">${fbReady?'● Conectado a Firestore (akadem-erp). Los datos se sincronizan en la nube.':'● Modo local. Configura Firebase en erp_core.js para sincronizar entre dispositivos.'}</div>
+        <div class="card card-pad" style="background:var(--red-soft);border:1px solid #f3c9c4">
+          <div style="font-weight:700;color:var(--red);margin-bottom:6px">Zona peligrosa</div>
+          <p style="font-size:12.5px;color:var(--navy-soft);margin-bottom:12px">Elimina los datos operativos (empresas, personas, propuestas, proyectos, centros de costo, OC, hitos, transacciones y facturas). <b>Conserva</b> usuarios y categorías de egreso. Úsalo para borrar los datos demo antes de migrar, o para partir de cero. Descarga un respaldo primero.</p>
+          <button class="btn btn-danger" onclick="Config.limpiar()">Limpiar datos operativos</button>
+        </div>
         </div>`;
     }
   },
   async setRol(id,rol){ const u=Store.get("usuarios",id); u.rol=rol; await Store.set("usuarios",u); toast("Rol actualizado","ok"); },
+  migPreview(){
+    const raw=document.getElementById('mig_raw').value.trim();
+    if(!raw){ toast("Pega el JSON primero","err"); return; }
+    const p=Migracion.preview(raw);
+    const res=document.getElementById('mig_result');
+    if(p.error){ res.innerHTML=`<div class="card card-pad" style="background:var(--red-soft);color:var(--red)">${esc(p.error)}</div>`; document.getElementById('mig_run').disabled=true; return; }
+    const c=p.counts;
+    const row=(l,o)=>`<tr><td class="t-strong">${l}</td><td class="num">${o.total}</td><td class="num" style="color:${o.nuevos>0?'var(--green)':'var(--muted)'}">${o.nuevos}</td><td class="t-mut">${o.total-o.nuevos>0?(o.total-o.nuevos)+' ya migrados':'—'}</td></tr>`;
+    res.innerHTML=`<div class="card card-pad">
+      <div style="font-weight:700;margin-bottom:10px">Previo de migración</div>
+      <div class="tbl-wrap" style="border:none"><table>
+        <thead><tr><th>Entidad</th><th class="num">En CashFlow</th><th class="num">A crear</th><th>Estado</th></tr></thead>
+        <tbody>
+          ${row("Empresas (clientes)",c.empresas)}
+          ${row("Propuestas",c.propuestas)}
+          ${row("Proyectos + centros costo",c.proyectos)}
+          ${row("Transacciones",c.transacciones)}
+          ${row("Órdenes de compra",c.oc)}
+          ${row("Categorías de egreso",c.categorias)}
+          ${row("Personas",c.personas)}
+        </tbody></table></div>
+      <div class="hint" style="margin-top:10px">Solo se crean los registros marcados "a crear". Los demás ya existen y se omiten.</div>
+    </div>`;
+    const totalNuevos=Object.values(c).reduce((s,o)=>s+o.nuevos,0);
+    document.getElementById('mig_run').disabled=totalNuevos===0;
+    if(totalNuevos===0) toast("Todo ya está migrado","ok");
+  },
+  async migRun(){
+    const ok=await Confirm.ask({title:"Ejecutar migración",
+      message:"Se crearán los registros nuevos en akadem-erp.",
+      detail:"El CashFlow original no se toca. La migración es idempotente: registros ya migrados se omiten.",
+      okLabel:"Migrar ahora"});
+    if(!ok) return;
+    const raw=document.getElementById('mig_raw').value.trim();
+    document.getElementById('mig_run').disabled=true;
+    document.getElementById('mig_result').innerHTML=`<div class="loading"><div class="spin"></div><div>Migrando…</div></div>`;
+    const log=await Migracion.run(raw);
+    if(!log){ Config.tab("migra"); return; }
+    const total=Object.values(log).reduce((a,b)=>a+b,0);
+    document.getElementById('mig_result').innerHTML=`<div class="card card-pad" style="background:var(--green-soft)">
+      <div style="font-weight:700;color:var(--green);margin-bottom:10px">✓ Migración completada — ${total} registros creados</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        ${Object.entries(log).filter(([k,v])=>v>0).map(([k,v])=>`<span class="chip">${k}: <b>${v}</b></span>`).join("")||'<span class="t-mut">Nada nuevo que migrar</span>'}
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px"><button class="btn btn-soft btn-sm" onclick="Router.go('proyectos')">Ver proyectos</button><button class="btn btn-soft btn-sm" onclick="Router.go('dashboard')">Ver dashboard</button></div>
+    </div>`;
+    toast("Migración completada: "+total+" registros","ok");
+  },
   async addCat(){ const v=document.getElementById('cat_new').value.trim(); if(!v)return; await Store.set("categorias_egreso",{nombre:v}); Config.tab("cats"); },
   async delCat(id){ await Store.del("categorias_egreso",id); Config.tab("cats"); },
+  async limpiar(){
+    const cols=["empresas","personas","propuestas","proyectos","centros_costo","ordenes_compra","hitos","transacciones","facturas"];
+    const total=cols.reduce((s,c)=>s+Store.all(c).length,0);
+    if(total===0){ toast("No hay datos operativos que borrar","ok"); return; }
+    const ok=await Confirm.ask({title:"Limpiar datos operativos",danger:true,
+      message:"Vas a eliminar "+total+" registros operativos (empresas, proyectos, transacciones y más).",
+      detail:"Usuarios y categorías de egreso se conservan. Esta acción no se puede deshacer. Asegúrate de haber descargado un respaldo.",
+      word:"BORRAR", okLabel:"Eliminar todo"});
+    if(!ok){ toast("Cancelado","err"); return; }
+    document.getElementById('cfgHost').innerHTML=`<div class="loading"><div class="spin"></div><div>Limpiando…</div></div>`;
+    for(const c of cols){
+      for(const doc of Store.all(c)){ await Store.del(c,doc.id); }
+    }
+    for(const ct of Store.all("contadores")){ await Store.del("contadores",ct.id); }
+    Store._cacheToLS();
+    toast("Datos operativos eliminados ("+total+" registros)","ok");
+    Config.tab("backup");
+  },
   backup(){
     const blob=new Blob([JSON.stringify(Store.data,null,2)],{type:"application/json"});
     const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download="akadem_erp_backup_"+todayISO()+".json"; a.click();
@@ -1776,8 +2065,156 @@ const Config={
 };
 
 /* =====================================================================
-   SEED — datos iniciales reales de AKADEM
+   MIGRADOR — CashFlow legacy → colecciones ERP
+   No toca el CashFlow. Lee el JSON exportado y carga en akadem-erp.
+   Idempotente: marca registros migrados con _legacyId para no duplicar.
    ===================================================================== */
+const Migracion = {
+  // mapeo de estados legacy → ERP
+  _estProy:{completado:"cerrado",en_ejecucion:"activo",planificado:"activo",en_pausa:"en pausa"},
+  _estProp:{borrador:"borrador",enviada:"enviada",negociacion:"negociacion",adjudicada:"adjudicada",perdida:"perdida"},
+
+  parse(raw){
+    let data; try{ data=JSON.parse(raw); }catch(e){ return {error:"JSON inválido: "+e.message}; }
+    // aceptar tanto el objeto directo como {payload:"..."} o anidado
+    if(typeof data.payload==="string"){ try{ data=JSON.parse(data.payload); }catch(e){} }
+    const r={
+      clientes:data.clientes||[], propuestas:data.propuestas||[], proyectos:data.proyectos||[],
+      transacciones:data.transacciones||[], oc:data.oc||[], categorias:(data.categorias||[]).filter(c=>c.tipo==="egreso"),
+      personas:data.personas||[]
+    };
+    return r;
+  },
+
+  preview(raw){
+    const d=this.parse(raw);
+    if(d.error) return d;
+    // cuántos ya están migrados (por _legacyId)
+    const yaEmp=new Set(Store.all("empresas").map(e=>e._legacyId).filter(Boolean));
+    const yaProp=new Set(Store.all("propuestas").map(p=>p._legacyId).filter(Boolean));
+    const yaProy=new Set(Store.all("proyectos").map(p=>p._legacyId).filter(Boolean));
+    const yaTx=new Set(Store.all("transacciones").map(t=>t._legacyId).filter(Boolean));
+    const yaOc=new Set(Store.all("ordenes_compra").map(o=>o._legacyId).filter(Boolean));
+    const yaCat=new Set(Store.all("categorias_egreso").map(c=>c._legacyNombre).filter(Boolean));
+    return {
+      data:d,
+      counts:{
+        empresas:{total:d.clientes.length, nuevos:d.clientes.filter(c=>!yaEmp.has("cli_"+c.id)).length},
+        propuestas:{total:d.propuestas.length, nuevos:d.propuestas.filter(p=>!yaProp.has("prop_"+p.id)).length},
+        proyectos:{total:d.proyectos.length, nuevos:d.proyectos.filter(p=>!yaProy.has("proy_"+p.id)).length},
+        transacciones:{total:d.transacciones.length, nuevos:d.transacciones.filter(t=>!yaTx.has("tx_"+t.id)).length},
+        oc:{total:d.oc.length, nuevos:d.oc.filter(o=>!yaOc.has("oc_"+o.id)).length},
+        categorias:{total:d.categorias.length, nuevos:d.categorias.filter(c=>!yaCat.has(c.nombre)).length},
+        personas:{total:d.personas.length, nuevos:d.personas.length}
+      }
+    };
+  },
+
+  async run(raw){
+    const d=this.parse(raw);
+    if(d.error){ toast(d.error,"err"); return; }
+    const log={empresas:0,propuestas:0,proyectos:0,centros:0,transacciones:0,oc:0,categorias:0,personas:0};
+
+    // índices legacyId → nuevo id
+    const mapEmp={}, mapProy={};
+
+    // pre-cargar lo ya migrado para revincular aunque sea 2da corrida
+    Store.all("empresas").forEach(e=>{ if(e._legacyId&&e._legacyId.startsWith("cli_")) mapEmp[e._legacyId.slice(4)]=e.id; });
+    Store.all("proyectos").forEach(p=>{ if(p._legacyId&&p._legacyId.startsWith("proy_")) mapProy[p._legacyId.slice(5)]=p.id; });
+
+    // 1) CATEGORÍAS DE EGRESO
+    const catExist=new Set(Store.all("categorias_egreso").map(c=>c.nombre));
+    for(const c of d.categorias){
+      if(catExist.has(c.nombre)) continue;
+      await Store.set("categorias_egreso",{nombre:c.nombre,_legacyNombre:c.nombre}); log.categorias++;
+    }
+
+    // 2) EMPRESAS (clientes)
+    for(const c of d.clientes){
+      const lid="cli_"+c.id;
+      const ex=Store.all("empresas").find(e=>e._legacyId===lid);
+      if(ex){ mapEmp[c.id]=ex.id; continue; }
+      const e=await Store.set("empresas",{
+        razon:c.nombre, rut:c.rut?cleanRut(c.rut):"", tipo:"cliente",
+        giro:"", contacto:[c.contacto,c.email].filter(Boolean).join(" · "),
+        condPago:c.diasPago?c.diasPago+" días":"", datosFact:c.tipo?("Sector: "+c.tipo):"",
+        _legacyId:lid });
+      mapEmp[c.id]=e.id; log.empresas++;
+    }
+
+    // 3) PERSONAS
+    for(const pe of d.personas){
+      const lid="per_"+pe.id;
+      if(Store.all("personas").some(x=>x._legacyId===lid)) continue;
+      await Store.set("personas",{nombre:pe.nombre||pe.nombreCompleto||"—",rut:pe.rut?cleanRut(pe.rut):"",
+        tipoP:pe.tipo||"freelancer",email:pe.email||"",tarifa:+pe.tarifa||0,
+        banco:pe.banco||"",tCuenta:pe.tipoCuenta||"",nCuenta:pe.numCuenta||"",_legacyId:lid}); log.personas++;
+    }
+
+    // 4) PROPUESTAS
+    for(const p of d.propuestas){
+      const lid="prop_"+p.id;
+      if(Store.all("propuestas").some(x=>x._legacyId===lid)) continue;
+      await Store.set("propuestas",{
+        cliente_ref:mapEmp[p.clienteId]||null, tipo:p.tipo||"GEST", titulo:p.nombre||p.desc||"",
+        monto:+p.monto||0, estado:this._estProp[p.estado]||"enviada",
+        fechaCierre:p.vence||p.fecha||"", responsable:"", notas:p.desc||"",
+        historial:[{fecha:p.creado||nowISO(),txt:"Migrada desde CashFlow",user:"migracion"}],
+        _legacyId:lid });
+      log.propuestas++;
+    }
+
+    // 5) PROYECTOS + centros de costo
+    for(const p of d.proyectos){
+      const lid="proy_"+p.id;
+      let proyId=mapProy[p.id];
+      if(!proyId){
+        const cc=await Store.set("centros_costo",{nombre:"CC "+(p.codigo||p.id),_legacyId:"cc_"+p.id}); log.centros++;
+        const proy=await Store.set("proyectos",{
+          codigo:p.codigo||("AKD-LEG-"+p.id), cliente_ref:mapEmp[p.clienteId]||null, tipo:p.tipo||"GEST",
+          titulo:p.nombre||p.desc||"", centro_costo_ref:cc.id, montoTotal:+p.presupuesto||0,
+          estado:this._estProy[p.estado]||"activo", condiciones:p.desc||"",
+          fechaIni:p.inicio||"", fechaFin:p.cierre||"",
+          _legacyId:lid, _legacyIngresos:+p.ingresos||0, _legacyGastado:+p.gastado||0 });
+        cc.proyecto_ref=proy.id; await Store.set("centros_costo",cc);
+        proyId=proy.id; mapProy[p.id]=proyId; log.proyectos++;
+      }
+    }
+
+    // 6) OC
+    for(const o of d.oc){
+      const lid="oc_"+o.id;
+      if(Store.all("ordenes_compra").some(x=>x._legacyId===lid)) continue;
+      const proyId=mapProy[o.proyectoId]||null;
+      const oc=await Store.set("ordenes_compra",{
+        proyecto_ref:proyId, numero:o.numero||"", emisor:o.clienteNom||"", monto:+o.monto||0,
+        fecha:o.fecha||"", _legacyId:lid, _archivo:o.archivo||"", _estado:o.estado||"" });
+      if(proyId){ const pr=Store.get("proyectos",proyId); if(pr&&!pr.OC_ref){ pr.OC_ref=oc.id; await Store.set("proyectos",pr); } }
+      log.oc++;
+    }
+
+    // 7) TRANSACCIONES
+    for(const t of d.transacciones){
+      const lid="tx_"+t.id;
+      if(Store.all("transacciones").some(x=>x._legacyId===lid)) continue;
+      const proyId=mapProy[t.proyectoId]||null;
+      const real=t.estado==="real";
+      await Store.set("transacciones",{
+        proyecto_ref:proyId, centro_costo_ref:proyId?(Store.get("proyectos",proyId)||{}).centro_costo_ref:null,
+        tipo:t.tipo==="ingreso"?"ingreso":"egreso", real, monto:+t.monto||0,
+        fecha:t.fecha||"", concepto:t.concepto||"",
+        empresa_ref:(t.tipo==="ingreso"&&mapEmp[t.contraId])?mapEmp[t.contraId]:null,
+        persona_ref:null,
+        categoria_ref:null,
+        _legacyId:lid, _legacyEstado:t.estado||"" });
+      log.transacciones++;
+    }
+
+    Store._cacheToLS();
+    return log;
+  }
+};
+
 Seed.run=async function(){
   // categorías
   for(const n of CATEGORIAS_EGRESO_SEED) await Store.set("categorias_egreso",{nombre:n});
