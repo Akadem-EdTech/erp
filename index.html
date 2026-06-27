@@ -496,7 +496,8 @@ function toast(msg,type){
    (o localStorage en modo offline). Escrituras atómicas por documento.
    ===================================================================== */
 const COLLECTIONS = ["empresas","personas","propuestas","proyectos","centros_costo",
-  "ordenes_compra","hitos","transacciones","categorias_egreso","facturas","usuarios","contadores"];
+  "ordenes_compra","hitos","transacciones","categorias_egreso","facturas","usuarios","contadores",
+  "cuentas","mov_tesoreria"];
 
 const Store = {
   data:{},           // { coleccion: { id: doc } }
@@ -723,6 +724,7 @@ const NAV = [
   {id:"proyectos", label:"Proyectos",    icon:'<path d="M3 7h18M3 12h18M3 17h12"/>'},
   {id:"flujo",     label:"Flujo Económico", icon:'<path d="M12 1v22M5 8l7-5 7 5M5 16l7 5 7-5"/>'},
   {sec:"Administración"},
+  {id:"tesoreria",  label:"Tesorería",     icon:'<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/>'},
   {id:"facturacion",label:"Facturación", icon:'<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>'},
   {id:"empresas",  label:"Empresas",     icon:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h.01M9 13h.01M9 17h.01M13 9h2M13 13h2M13 17h2"/>'},
   {id:"personas",  label:"Personas",     icon:'<circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2M16 3.13a4 4 0 0 1 0 7.75"/>'},
@@ -1441,6 +1443,9 @@ const Proyectos={
           </select>
           <div id="t_cpSel" style="margin-top:8px"></div>
         </div>
+        ${Store.all("cuentas").length?`<div class="fg"><label>Cuenta afectada <span class="t-mut" style="font-weight:400">(opcional · solo movimientos reales)</span></label>
+          <select id="t_cuenta"><option value="">— No afecta tesorería —</option>${Store.all("cuentas").map(c=>`<option value="${c.id}">${esc(c.nombre)}</option>`).join("")}</select>
+          <div class="hint">Si eliges una cuenta, este movimiento sumará o restará de su saldo real.</div></div>`:''}
       </div>`,
       `<button class="btn btn-ghost" onclick="Modal.close()">Cancelar</button>
        <button class="btn btn-o" onclick="Proyectos.txSave('${pid}')">Guardar transacción</button>`);
@@ -1470,7 +1475,8 @@ const Proyectos={
     const tx={proyecto_ref:pid,centro_costo_ref:(Store.get("proyectos",pid)||{}).centro_costo_ref,
       tipo:document.getElementById('t_tipo').value, real:document.getElementById('t_real').value==="true",
       monto, fecha:document.getElementById('t_fecha').value, concepto:document.getElementById('t_concepto').value,
-      empresa_ref:cpTipo==="empresa"?cpVal:null, persona_ref:cpTipo==="persona"?cpVal:null, categoria_ref:cpTipo==="categoria"?cpVal:null};
+      empresa_ref:cpTipo==="empresa"?cpVal:null, persona_ref:cpTipo==="persona"?cpVal:null, categoria_ref:cpTipo==="categoria"?cpVal:null,
+      cuenta_ref:(document.getElementById('t_cuenta')&&document.getElementById('t_cuenta').value)||null};
     await Store.set("transacciones",tx);
     Modal.close(); toast("Transacción registrada","ok"); Proyectos.detail(pid);
     setTimeout(()=>document.querySelector('#proyTabs .tab[data-t="tx"]')?.click(),100);
@@ -2001,6 +2007,7 @@ const Config={
           ${row("Órdenes de compra",c.oc)}
           ${row("Categorías de egreso",c.categorias)}
           ${row("Personas",c.personas)}
+          ${row("Cuentas (tesorería)",c.cuentas)}
         </tbody></table></div>
       <div class="hint" style="margin-top:10px">Solo se crean los registros marcados "a crear". Los demás ya existen y se omiten.</div>
     </div>`;
@@ -2032,7 +2039,7 @@ const Config={
   async addCat(){ const v=document.getElementById('cat_new').value.trim(); if(!v)return; await Store.set("categorias_egreso",{nombre:v}); Config.tab("cats"); },
   async delCat(id){ await Store.del("categorias_egreso",id); Config.tab("cats"); },
   async limpiar(){
-    const cols=["empresas","personas","propuestas","proyectos","centros_costo","ordenes_compra","hitos","transacciones","facturas"];
+    const cols=["empresas","personas","propuestas","proyectos","centros_costo","ordenes_compra","hitos","transacciones","facturas","cuentas","mov_tesoreria"];
     const total=cols.reduce((s,c)=>s+Store.all(c).length,0);
     if(total===0){ toast("No hay datos operativos que borrar","ok"); return; }
     const ok=await Confirm.ask({title:"Limpiar datos operativos",danger:true,
@@ -2065,6 +2072,239 @@ const Config={
 };
 
 /* =====================================================================
+   TESORERÍA — cuentas, posición de caja, proyección, runway
+   ===================================================================== */
+const Tes = {
+  // saldo actual de una cuenta = saldo inicial + movimientos propios reales + transacciones de proyecto reales con cuenta_ref
+  saldoCuenta(cid){
+    const c=Store.get("cuentas",cid); if(!c) return 0;
+    let s=+c.saldoInicial||0;
+    Store.all("mov_tesoreria").filter(m=>m.cuenta_ref===cid).forEach(m=>{ s+=(m.tipo==="ingreso"?1:-1)*(+m.monto||0); });
+    Store.all("transacciones").filter(t=>t.cuenta_ref===cid && t.real===true).forEach(t=>{ s+=(t.tipo==="ingreso"?1:-1)*(+t.monto||0); });
+    return s;
+  },
+  posicionTotal(){ return Store.all("cuentas").reduce((s,c)=>s+this.saldoCuenta(c.id),0); },
+  // quema mensual promedio: egresos reales de los últimos 90 días / 3
+  quemaMensual(){
+    const desde=new Date(Date.now()-90*864e5);
+    let eg=0;
+    Store.all("transacciones").filter(t=>t.tipo==="egreso"&&t.real&&new Date(t.fecha)>=desde).forEach(t=>eg+=+t.monto||0);
+    Store.all("mov_tesoreria").filter(m=>m.tipo==="egreso"&&new Date(m.fecha)>=desde).forEach(m=>eg+=+m.monto||0);
+    return eg/3;
+  },
+  runwayMeses(){ const q=this.quemaMensual(); return q>0?this.posicionTotal()/q:Infinity; },
+  // proyección de caja a N días: saldo hoy + ingresos/egresos proyectados (hitos pendientes + tx proyectadas) por ventana
+  proyeccion(){
+    const hoy=new Date(); const base=this.posicionTotal();
+    const ventanas=[30,60,90];
+    const res=ventanas.map(d=>{
+      const lim=new Date(hoy.getTime()+d*864e5);
+      let ing=0,eg=0;
+      // hitos de facturación pendientes (cobro futuro) y de pago pendientes
+      Store.all("hitos").forEach(h=>{
+        if(!h.fechaProg) return; const f=new Date(h.fechaProg); if(f<hoy||f>lim) return;
+        if(h.tipo==="facturacion"&&!["cobrado"].includes(h.estado)) ing+=+h.monto||0;
+        if(h.tipo==="pago"&&!["pagado"].includes(h.estado)) eg+=+h.monto||0;
+      });
+      // transacciones proyectadas (no reales) con fecha en ventana
+      Store.all("transacciones").forEach(t=>{
+        if(t.real) return; const f=new Date(t.fecha); if(isNaN(f)||f<hoy||f>lim) return;
+        if(t.tipo==="ingreso") ing+=+t.monto||0; else eg+=+t.monto||0;
+      });
+      return {dias:d, ing, eg, saldoProy:base+ing-eg};
+    });
+    return {base,res};
+  }
+};
+
+Views.tesoreria=function(){
+  UI.setHeader("Tesorería","Posición de caja, proyección y runway");
+  if(Auth.can("write")) UI.setActions(`<button class="btn btn-ghost" onclick="Tes.movForm()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>Movimiento</button><button class="btn btn-o" onclick="Tes.cuentaForm()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>Nueva cuenta</button>`);
+
+  const cuentas=Store.all("cuentas");
+  if(!cuentas.length){ UI.render(emptyState("Sin cuentas registradas","Crea tu primera cuenta (bancaria, vista o efectivo) para empezar a controlar la caja real.",
+    Auth.can("write")?`<button class="btn btn-o" onclick="Tes.cuentaForm()">Crear cuenta</button>`:'')); return; }
+
+  const total=Tes.posicionTotal();
+  const quema=Tes.quemaMensual();
+  const runway=Tes.runwayMeses();
+  const proy=Tes.proyeccion();
+
+  UI.render(`
+    <div class="grid g4" style="margin-bottom:16px">
+      ${kpiCard("Posición de caja hoy",fmt(total),cuentas.length+" cuenta(s)","var(--green)","var(--green-soft)",'<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>')}
+      ${kpiCard("Quema mensual",fmt(quema),"Promedio últimos 90 días","var(--red)","var(--red-soft)",'<path d="M12 2v20M5 9l7-7 7 7"/>')}
+      ${kpiCard("Runway",runway===Infinity?"∞":runway.toFixed(1)+" meses",runway===Infinity?"Sin quema registrada":"Al ritmo actual","var(--amber)","var(--amber-soft)",'<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>')}
+      ${kpiCard("Proyección 90 días",fmt(proy.res[2].saldoProy),(proy.res[2].saldoProy>=total?"+":"")+fmt(proy.res[2].saldoProy-total)+" vs hoy",proy.res[2].saldoProy>=total?"var(--green)":"var(--red)",proy.res[2].saldoProy>=total?"var(--green-soft)":"var(--red-soft)",'<path d="M3 3v18h18"/><path d="M7 14l3-4 3 3 4-6"/>')}
+    </div>
+
+    <div class="grid g2" style="margin-bottom:16px">
+      <div class="card card-pad">
+        <div class="sect-title">Cuentas</div>
+        <div class="tbl-wrap" style="border:none"><table><thead><tr><th>Cuenta</th><th>Tipo</th><th class="num">Saldo actual</th><th></th></tr></thead>
+          <tbody>${cuentas.map(c=>{ const s=Tes.saldoCuenta(c.id);
+            return `<tr style="cursor:pointer" onclick="Tes.cuentaDetail('${c.id}')">
+              <td class="t-strong">${esc(c.nombre)}</td><td class="t-mut">${esc(c.tipo||'—')}</td>
+              <td class="num t-strong" style="color:${s>=0?'var(--navy)':'var(--red)'}">${fmt(s)}</td>
+              <td class="t-actions"><span class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 18l6-6-6-6" stroke-linecap="round"/></svg></span></td>
+            </tr>`; }).join("")}</tbody>
+          <tfoot><tr style="border-top:2px solid var(--border)"><td colspan="2" class="t-strong">Total consolidado</td><td class="num t-strong" style="font-size:15px;color:var(--orange-deep)">${fmt(total)}</td><td></td></tr></tfoot>
+        </table></div>
+      </div>
+      <div class="card card-pad">
+        <div class="sect-title">Proyección de caja</div>
+        <canvas id="chTesProy" height="150"></canvas>
+      </div>
+    </div>
+
+    <div class="card card-pad">
+      <div class="sect-title">Proyección detallada (saldo real de partida)</div>
+      <div class="tbl-wrap" style="border:none"><table>
+        <thead><tr><th>Horizonte</th><th class="num">Saldo hoy</th><th class="num">Cobros esperados</th><th class="num">Pagos esperados</th><th class="num">Saldo proyectado</th><th>Estado</th></tr></thead>
+        <tbody>${proy.res.map(r=>`<tr>
+          <td class="t-strong">${r.dias} días</td>
+          <td class="num t-mut">${fmt(proy.base)}</td>
+          <td class="num" style="color:var(--green)">+${fmt(r.ing)}</td>
+          <td class="num" style="color:var(--red)">−${fmt(r.eg)}</td>
+          <td class="num t-strong">${fmt(r.saldoProy)}</td>
+          <td><span class="badge ${r.saldoProy<0?'b-red':r.saldoProy<(quema||1)?'b-amber':'b-green'}">${r.saldoProy<0?'Caja negativa':r.saldoProy<(quema||1)?'Caja ajustada':'Saludable'}</span></td>
+        </tr>`).join("")}</tbody>
+      </table></div>
+      <div class="hint" style="margin-top:10px">Cobros y pagos esperados provienen de hitos pendientes y transacciones proyectadas dentro de cada ventana. El saldo de partida es la caja real de todas las cuentas.</div>
+    </div>
+  `);
+  Tes.drawProy();
+};
+
+Tes.drawProy=function(){
+  const ctx=document.getElementById('chTesProy'); if(!ctx||typeof Chart==='undefined') return;
+  if(this._ch) this._ch.destroy();
+  const p=this.proyeccion();
+  this._ch=new Chart(ctx,{type:'line',data:{labels:['Hoy','30d','60d','90d'],datasets:[{
+    label:'Saldo proyectado',data:[p.base,p.res[0].saldoProy,p.res[1].saldoProy,p.res[2].saldoProy],
+    borderColor:'#E8490F',backgroundColor:'rgba(232,73,15,.08)',fill:true,tension:.3,borderWidth:2,pointRadius:4}]},
+    options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'$'+(v/1e6).toFixed(1)+'M',font:{size:10}}},x:{ticks:{font:{size:11}}}}}});
+};
+
+Tes.cuentaForm=function(id){
+  const c=id?Store.get("cuentas",id):{tipo:"Cuenta Corriente"};
+  Modal.open(id?"Editar cuenta":"Nueva cuenta",`
+    <div class="form-grid">
+      <div class="fg"><label>Nombre <span class="req">*</span></label><input id="c_nombre" value="${esc(c.nombre||'')}" placeholder="Banco de Chile · Corriente"></div>
+      <div class="form-row">
+        <div class="fg"><label>Tipo</label><select id="c_tipo">
+          ${["Cuenta Corriente","Cuenta Vista","Ahorro","Efectivo","Línea de Crédito"].map(t=>`<option ${c.tipo===t?'selected':''}>${t}</option>`).join("")}</select></div>
+        <div class="fg"><label>Banco / Institución</label><input id="c_banco" value="${esc(c.banco||'')}"></div>
+      </div>
+      <div class="form-row">
+        <div class="fg"><label>N° de cuenta</label><input id="c_num" value="${esc(c.num||'')}"></div>
+        <div class="fg"><label>Saldo inicial ${id?'<span class="t-mut" style="font-weight:400">(no editable)</span>':'<span class="req">*</span>'}</label><input id="c_saldo" type="number" value="${c.saldoInicial!=null?c.saldoInicial:''}" ${id?'disabled':''} placeholder="0"></div>
+      </div>
+      ${id?'<div class="hint">El saldo inicial se fija al crear. El saldo actual se recalcula con los movimientos.</div>':'<div class="hint">Ingresa el saldo que la cuenta tiene HOY. A partir de ahí, cada movimiento lo ajusta.</div>'}
+    </div>`,
+    `<button class="btn btn-ghost" onclick="Modal.close()">Cancelar</button>
+     <button class="btn btn-o" onclick="Tes.cuentaSave('${id||''}')">Guardar</button>`);
+};
+Tes.cuentaSave=async function(id){
+  const nombre=document.getElementById('c_nombre').value.trim();
+  if(!nombre){ toast("Nombre requerido","err"); return; }
+  const c=id?Store.get("cuentas",id):{};
+  c.nombre=nombre; c.tipo=document.getElementById('c_tipo').value;
+  c.banco=document.getElementById('c_banco').value; c.num=document.getElementById('c_num').value;
+  if(!id) c.saldoInicial=+document.getElementById('c_saldo').value||0;
+  await Store.set("cuentas",c); Modal.close(); toast("Cuenta guardada","ok"); Views.tesoreria();
+};
+
+Tes.cuentaDetail=function(id){
+  const c=Store.get("cuentas",id);
+  const movs=Store.all("mov_tesoreria").filter(m=>m.cuenta_ref===id);
+  const txs=Store.all("transacciones").filter(t=>t.cuenta_ref===id&&t.real);
+  // unificar para listar cronológicamente
+  const items=[
+    ...movs.map(m=>({fecha:m.fecha,tipo:m.tipo,monto:m.monto,concepto:m.concepto,origen:"Tesorería",conc:m.conciliado,id:m.id,esMov:true})),
+    ...txs.map(t=>({fecha:t.fecha,tipo:t.tipo,monto:t.monto,concepto:t.concepto||'(proyecto)',origen:(Store.get("proyectos",t.proyecto_ref)||{}).codigo||"Proyecto",conc:t.conciliado,id:t.id,esMov:false}))
+  ].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
+  Modal.open("Cuenta · "+esc(c.nombre),`
+    <div class="grid g3" style="margin-bottom:16px">
+      <div class="kpi" style="padding:14px"><div class="kpi-label">Saldo inicial</div><div class="kpi-val" style="font-size:18px">${fmt(c.saldoInicial)}</div></div>
+      <div class="kpi" style="padding:14px"><div class="kpi-label">Movimientos</div><div class="kpi-val" style="font-size:18px">${items.length}</div></div>
+      <div class="kpi" style="padding:14px"><div class="kpi-label">Saldo actual</div><div class="kpi-val" style="font-size:18px;color:var(--orange-deep)">${fmt(Tes.saldoCuenta(id))}</div></div>
+    </div>
+    ${items.length?`<div class="tbl-wrap"><table><thead><tr><th>Fecha</th><th>Concepto</th><th>Origen</th><th class="num">Monto</th><th>Conciliado</th></tr></thead>
+      <tbody>${items.map(it=>`<tr>
+        <td class="t-mut">${fmtFecha(it.fecha)}</td><td>${esc(it.concepto)}</td>
+        <td><span class="chip" style="padding:2px 8px;font-size:11px">${esc(it.origen)}</span></td>
+        <td class="num t-strong" style="color:${it.tipo==='ingreso'?'var(--green)':'var(--red)'}">${it.tipo==='ingreso'?'+':'−'}${fmt(it.monto)}</td>
+        <td>${Auth.can('write')?`<input type="checkbox" ${it.conc?'checked':''} onchange="Tes.toggleConc('${it.esMov?'mov_tesoreria':'transacciones'}','${it.id}',this.checked)">`:(it.conc?'✓':'—')}</td>
+      </tr>`).join("")}</tbody></table></div>`:'<div class="empty" style="padding:30px"><p>Sin movimientos en esta cuenta</p></div>'}`,
+    Auth.can('write')?`<button class="btn btn-danger" onclick="Tes.cuentaDel('${id}')">Eliminar cuenta</button>
+      <button class="btn btn-ghost" onclick="Tes.cuentaForm('${id}')">Editar</button>
+      <button class="btn btn-o" onclick="Tes.movForm(null,'${id}')">+ Movimiento</button>`:'',true);
+};
+Tes.toggleConc=async function(col,id,val){ const d=Store.get(col,id); if(!d)return; d.conciliado=val; await Store.set(col,d); toast(val?"Conciliado":"Desmarcado","ok"); };
+Tes.cuentaDel=async function(id){
+  const movs=Store.all("mov_tesoreria").some(m=>m.cuenta_ref===id);
+  const txs=Store.all("transacciones").some(t=>t.cuenta_ref===id);
+  if(movs||txs){ toast("No se puede: tiene movimientos asociados","err"); return; }
+  const ok=await Confirm.ask({title:"Eliminar cuenta",danger:true,message:"¿Eliminar esta cuenta?",detail:"No tiene movimientos asociados."});
+  if(!ok) return; await Store.del("cuentas",id); Modal.close(); toast("Eliminada"); Views.tesoreria();
+};
+
+/* movimiento propio de tesorería (no de proyecto): gasto general, ingreso, o transferencia */
+Tes.movForm=function(_,cuentaPre){
+  const cuentas=Store.all("cuentas");
+  if(!cuentas.length){ toast("Crea una cuenta primero","err"); return; }
+  Modal.open("Movimiento de tesorería",`
+    <div class="form-grid">
+      <div class="fg"><label>Tipo de movimiento</label>
+        <div class="tx-toggle" id="m_tipoTog">
+          <button type="button" class="tx-opt active" data-v="ingreso" onclick="Tes._setMovTipo('ingreso')">Ingreso</button>
+          <button type="button" class="tx-opt" data-v="egreso" onclick="Tes._setMovTipo('egreso')">Egreso</button>
+          <button type="button" class="tx-opt" data-v="transfer" onclick="Tes._setMovTipo('transfer')">Transferencia</button>
+        </div>
+        <input type="hidden" id="m_tipo" value="ingreso">
+      </div>
+      <div class="form-row">
+        <div class="fg" id="m_ctaBox"><label>Cuenta <span class="req">*</span></label><select id="m_cuenta">${cuentas.map(c=>`<option value="${c.id}" ${cuentaPre===c.id?'selected':''}>${esc(c.nombre)}</option>`).join("")}</select></div>
+        <div class="fg" id="m_ctaDestBox" style="display:none"><label>Cuenta destino <span class="req">*</span></label><select id="m_cuentaDest">${cuentas.map(c=>`<option value="${c.id}">${esc(c.nombre)}</option>`).join("")}</select></div>
+        <div class="fg"><label>Monto <span class="req">*</span></label><input id="m_monto" type="number" placeholder="0"></div>
+      </div>
+      <div class="form-row">
+        <div class="fg"><label>Fecha</label><input id="m_fecha" type="date" value="${todayISO()}"></div>
+        <div class="fg"><label>Categoría</label><select id="m_cat"><option value="">— Ninguna —</option>${optCategorias()}</select></div>
+      </div>
+      <div class="fg"><label>Concepto</label><input id="m_concepto" placeholder="Pago arriendo / Aporte socio / Transferencia interna…"></div>
+    </div>`,
+    `<button class="btn btn-ghost" onclick="Modal.close()">Cancelar</button>
+     <button class="btn btn-o" onclick="Tes.movSave()">Guardar</button>`);
+  setTimeout(()=>document.getElementById('m_monto')?.focus(),80);
+};
+Tes._setMovTipo=function(v){
+  document.getElementById('m_tipo').value=v;
+  document.querySelectorAll('#m_tipoTog .tx-opt').forEach(b=>b.classList.toggle('active',b.dataset.v===v));
+  document.getElementById('m_ctaDestBox').style.display=v==="transfer"?"block":"none";
+  document.querySelector('#m_ctaBox label').innerHTML=v==="transfer"?'Cuenta origen <span class="req">*</span>':'Cuenta <span class="req">*</span>';
+};
+Tes.movSave=async function(){
+  const tipo=document.getElementById('m_tipo').value;
+  const monto=+document.getElementById('m_monto').value;
+  if(!monto){ toast("Monto requerido","err"); return; }
+  const cuenta=document.getElementById('m_cuenta').value;
+  const fecha=document.getElementById('m_fecha').value;
+  const concepto=document.getElementById('m_concepto').value;
+  const cat=document.getElementById('m_cat').value||null;
+  if(tipo==="transfer"){
+    const dest=document.getElementById('m_cuentaDest').value;
+    if(cuenta===dest){ toast("Origen y destino deben ser distintos","err"); return; }
+    await Store.set("mov_tesoreria",{cuenta_ref:cuenta,tipo:"egreso",monto,fecha,concepto:concepto||"Transferencia a "+((Store.get("cuentas",dest)||{}).nombre||""),categoria_ref:cat,esTransfer:true});
+    await Store.set("mov_tesoreria",{cuenta_ref:dest,tipo:"ingreso",monto,fecha,concepto:concepto||"Transferencia desde "+((Store.get("cuentas",cuenta)||{}).nombre||""),categoria_ref:cat,esTransfer:true});
+    Modal.close(); toast("Transferencia registrada","ok"); Views.tesoreria(); return;
+  }
+  await Store.set("mov_tesoreria",{cuenta_ref:cuenta,tipo,monto,fecha,concepto,categoria_ref:cat});
+  Modal.close(); toast("Movimiento registrado","ok"); Views.tesoreria();
+};
+
+/* =====================================================================
    MIGRADOR — CashFlow legacy → colecciones ERP
    No toca el CashFlow. Lee el JSON exportado y carga en akadem-erp.
    Idempotente: marca registros migrados con _legacyId para no duplicar.
@@ -2081,7 +2321,7 @@ const Migracion = {
     const r={
       clientes:data.clientes||[], propuestas:data.propuestas||[], proyectos:data.proyectos||[],
       transacciones:data.transacciones||[], oc:data.oc||[], categorias:(data.categorias||[]).filter(c=>c.tipo==="egreso"),
-      personas:data.personas||[]
+      personas:data.personas||[], cuentas:data.cuentas||[]
     };
     return r;
   },
@@ -2105,7 +2345,8 @@ const Migracion = {
         transacciones:{total:d.transacciones.length, nuevos:d.transacciones.filter(t=>!yaTx.has("tx_"+t.id)).length},
         oc:{total:d.oc.length, nuevos:d.oc.filter(o=>!yaOc.has("oc_"+o.id)).length},
         categorias:{total:d.categorias.length, nuevos:d.categorias.filter(c=>!yaCat.has(c.nombre)).length},
-        personas:{total:d.personas.length, nuevos:d.personas.length}
+        personas:{total:d.personas.length, nuevos:d.personas.length},
+        cuentas:{total:d.cuentas.length, nuevos:d.cuentas.filter(c=>!new Set(Store.all("cuentas").map(x=>x._legacyId)).has("cta_"+c.id)).length}
       }
     };
   },
@@ -2113,7 +2354,8 @@ const Migracion = {
   async run(raw){
     const d=this.parse(raw);
     if(d.error){ toast(d.error,"err"); return; }
-    const log={empresas:0,propuestas:0,proyectos:0,centros:0,transacciones:0,oc:0,categorias:0,personas:0};
+    const log={empresas:0,propuestas:0,proyectos:0,centros:0,transacciones:0,oc:0,categorias:0,personas:0,cuentas:0};
+    const mapCta={};
 
     // índices legacyId → nuevo id
     const mapEmp={}, mapProy={};
@@ -2193,6 +2435,17 @@ const Migracion = {
       log.oc++;
     }
 
+    // 6.5) CUENTAS (tesorería) — la cuenta Mercado Pago ahora tiene destino
+    for(const ct of d.cuentas){
+      const lid="cta_"+ct.id;
+      const ex=Store.all("cuentas").find(x=>x._legacyId===lid);
+      if(ex){ mapCta[ct.id]=ex.id; continue; }
+      const nueva=await Store.set("cuentas",{
+        nombre:ct.nombre||"Cuenta", tipo:ct.tipo||"Cuenta Vista", banco:ct.banco||"",
+        num:ct.num||"", saldoInicial:+ct.saldo||0, _legacyId:lid });
+      mapCta[ct.id]=nueva.id; log.cuentas++;
+    }
+
     // 7) TRANSACCIONES
     for(const t of d.transacciones){
       const lid="tx_"+t.id;
@@ -2206,6 +2459,7 @@ const Migracion = {
         empresa_ref:(t.tipo==="ingreso"&&mapEmp[t.contraId])?mapEmp[t.contraId]:null,
         persona_ref:null,
         categoria_ref:null,
+        cuenta_ref:(t.cuentaId&&mapCta[t.cuentaId])?mapCta[t.cuentaId]:null,
         _legacyId:lid, _legacyEstado:t.estado||"" });
       log.transacciones++;
     }
